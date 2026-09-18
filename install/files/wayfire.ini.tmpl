@@ -1,0 +1,20 @@
+[core]
+plugins = autostart wayfire-shell resize move grid wobbly decoration place
+
+[autostart]
+fix_output = /usr/local/bin/fix-output-mode.sh
+polkit_agent = lxpolkit
+
+[move]
+activate = <alt> BTN_LEFT
+
+[resize]
+activate = <alt> BTN_RIGHT
+
+[decoration]
+title_height = 30
+border_size = 10
+
+[wobbly]
+friction = 3.000000
+spring_k = 2.000000

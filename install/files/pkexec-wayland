@@ -1,0 +1,20 @@
+#!/bin/sh
+# pkexec-wayland <command> [args...] -- runs <command> as root via pkexec,
+# with this session's WAYLAND_DISPLAY/XDG_RUNTIME_DIR explicitly threaded
+# through.
+#
+# pkexec strips almost the entire environment before exec'ing as root --
+# it only conditionally retains DISPLAY/XAUTHORITY, and only for actions
+# that set the allow_gui annotation, never WAYLAND_DISPLAY or
+# XDG_RUNTIME_DIR. A native-Wayland GTK app run through plain pkexec
+# therefore falls back to X11/Xwayland, which (at least under wayfire)
+# doesn't expose a usable Xauthority cookie to outside processes either --
+# so it just fails to start ("Authorization required, but no
+# authorization protocol specified"), with no window and no obvious
+# error to the person who clicked the launcher.
+#
+# Since pkexec strips environment but not argv, this passes the two
+# needed values as plain arguments instead, to pkexec-wayland-helper
+# (registered as its own polkit action, local.pkexec-wayland.run), which
+# re-exports them before exec'ing the real command as root.
+exec pkexec /usr/local/bin/pkexec-wayland-helper "$XDG_RUNTIME_DIR" "$WAYLAND_DISPLAY" "$@"

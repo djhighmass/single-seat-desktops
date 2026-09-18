@@ -1,0 +1,6 @@
+[Unit]
+Description=Fetch weather data for wf-panel's weather widget
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/owf-update-weather.sh

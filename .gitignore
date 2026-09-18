@@ -1,0 +1,5 @@
+.claude/
+*.bak-*
+*.tar.xz
+*.dsc
+install/tests/.personal_pattern
