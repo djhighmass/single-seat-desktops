@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Customize Desktop
+Comment=Choose your own terminal, weather, clocks, and launchers
+Exec=foot -e /usr/local/bin/wayfire-customize.sh
+Icon=preferences-other
+Terminal=false
+Categories=Settings;

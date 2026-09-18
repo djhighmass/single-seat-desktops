@@ -1,0 +1,10 @@
+#!/bin/sh
+# Invoked by pkexec (via pkexec-wayland) as root. $1/$2 carry the calling
+# user's XDG_RUNTIME_DIR/WAYLAND_DISPLAY -- pkexec's environment reset
+# doesn't touch argv, so these ride along as plain arguments instead.
+# Re-exported here before exec'ing the real command so it can reach the
+# caller's live Wayland session instead of failing to find a display.
+XDG_RUNTIME_DIR="$1"; shift
+WAYLAND_DISPLAY="$1"; shift
+export XDG_RUNTIME_DIR WAYLAND_DISPLAY
+exec "$@"

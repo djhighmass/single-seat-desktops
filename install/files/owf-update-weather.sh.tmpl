@@ -1,0 +1,52 @@
+#!/bin/bash
+# Fetches current weather from Open-Meteo (no API key needed) and writes
+# the JSON file panel-weather.sh reads: ~/.local/share/owf/data/data.json
+# ("owf" = the companion fetcher wf-shell's native weather widget expects
+# but upstream never shipped publicly -- this script fills that role,
+# with the result consumed via the generic command-output widget instead
+# since the native weather widget isn't compiled into this wf-shell build.)
+
+# No -e: this runs unattended off owf-weather.timer, and a transient
+# network hiccup (curl timing out) or an odd upstream response (jq
+# parsing out an empty temperature/code) are ordinary, expected
+# failures here, not bugs -- each is already caught by its own
+# `[ -z ... ] && exit 1` right after the command that can produce it,
+# so the script exits cleanly and leaves the last-good data.json alone
+# instead of a global trap firing at some less predictable point.
+set -uo pipefail
+
+LAT=__LAT__
+LON=__LON__
+ICON_DIR=/usr/share/icons/Adwaita/symbolic/status
+OUT="$HOME/.local/share/owf/data/data.json"
+
+resp="$(curl -s -m 10 "https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current_weather=true")"
+[ -z "$resp" ] && exit 1
+
+read -r temp code is_day <<< "$(echo "$resp" | jq -r '.current_weather // empty | "\(.temperature) \(.weathercode) \(.is_day)"' 2>/dev/null)"
+[ -z "${temp:-}" ] || [ -z "${code:-}" ] && exit 1
+
+# WMO weather codes -> Adwaita symbolic icon names
+case "$code" in
+  0) icon="weather-clear" ;;
+  1|2) icon="weather-few-clouds" ;;
+  3) icon="weather-overcast" ;;
+  45|48) icon="weather-fog" ;;
+  51|53|55|56|57) icon="weather-showers-scattered" ;;
+  61|63|65|66|67|80|81|82) icon="weather-showers" ;;
+  71|73|75|77|85|86) icon="weather-snow" ;;
+  95|96|99) icon="weather-storm" ;;
+  *) icon="weather-severe-alert" ;;
+esac
+
+if [ "$is_day" = "0" ] && [ "$icon" = "weather-clear" ]; then
+  icon="weather-clear-night"
+elif [ "$is_day" = "0" ] && [ "$icon" = "weather-few-clouds" ]; then
+  icon="weather-few-clouds-night"
+fi
+
+icon_path="${ICON_DIR}/${icon}-symbolic.svg"
+temp_rounded="$(printf '%.0f' "$temp")"
+
+mkdir -p "$(dirname "$OUT")"
+jq -n --arg temp "${temp_rounded}°C" --arg icon "$icon_path" '{temp: $temp, icon: $icon}' > "$OUT"

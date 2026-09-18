@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Change Background
+Comment=Pick a new desktop wallpaper
+Exec=/usr/local/bin/set-background.sh
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Settings;

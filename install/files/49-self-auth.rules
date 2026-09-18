@@ -1,0 +1,10 @@
+// Every onboarded account here is in the sudo group, so pkexec has
+// multiple valid "admin" identities to choose from. Without this rule it
+// asks the caller which admin to authenticate as (confusing on a
+// single-seat multi-user box, and outright broken for anything launched
+// from inside a wayfire session with no attached terminal to answer on).
+// This makes every user their own admin for polkit purposes, so pkexec
+// always just asks for the caller's own password.
+polkit.addAdminRule(function(action, subject) {
+    return ["unix-user:" + subject.user];
+});

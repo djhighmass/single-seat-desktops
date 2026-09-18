@@ -1,0 +1,9 @@
+[Unit]
+Description=Periodically refresh weather data for wf-panel
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=30min
+
+[Install]
+WantedBy=timers.target
