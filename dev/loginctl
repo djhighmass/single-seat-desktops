@@ -1,0 +1,5 @@
+#!/bin/sh
+# Container-only shim (see tests/Containerfile). The installer runs
+# `loginctl enable-linger <user>` under `set -e`; there is no logind here.
+echo "[container shim] loginctl $* -- no logind here, ignored" >&2
+exit 0

@@ -1,0 +1,11 @@
+single-seat-desktops dev session (nested wayfire, user: wftest)
+
+  dev-install     run 10-install-wayfire-desktops.sh as root against this
+                  container. Host account: droid.  Onboard: wftest.
+  dev-restart     restart wayfire so it picks up the new ~/.config/wayfire.ini
+                  (the window closes and reopens; do this after dev-install)
+  dev-customize   run wayfire-customize.sh as wftest (no root); its
+                  changes apply live to the running panel
+  /repo           your working tree, read-only, live -- edit on the host
+
+Closing the window ends the session. State is discarded with the container.

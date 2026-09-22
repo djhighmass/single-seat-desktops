@@ -1,0 +1,4 @@
+#!/bin/bash
+# Run the real installer against this container. `cd` matters: the
+# installer sources lib/common.sh relative to its own location.
+exec sudo /repo/install/10-install-wayfire-desktops.sh "$@"
