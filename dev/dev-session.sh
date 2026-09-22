@@ -72,7 +72,10 @@ if [ "$rebuild" = y ] || ! "${RT[@]}" image inspect "$IMAGE" >/dev/null 2>&1; th
   build_image "$IMAGE" "$REPO" || { echo "image build failed" >&2; exit 2; }
 fi
 
-args=(run --rm --name "$NAME" --ipc=host -v "$REPO:/repo:ro" -e "DEV_HOST_MODE=$HOST_MODE")
+# :ro,z SELinux-relabels the mount for container access -- a no-op on a
+# non-SELinux host, needed for it to be readable at all on an
+# SELinux-enforcing one (common on podman's home turf, Fedora/RHEL).
+args=(run --rm --name "$NAME" --ipc=host -v "$REPO:/repo:ro,z" -e "DEV_HOST_MODE=$HOST_MODE")
 
 case "$HOST_MODE" in
   x11)

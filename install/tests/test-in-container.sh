@@ -38,10 +38,17 @@ if [ "$rebuild" = y ] || ! "${RT[@]}" image inspect "$IMAGE" >/dev/null 2>&1; th
   build_image "$IMAGE" "$REPO" || { echo "image build failed" >&2; exit 2; }
 fi
 
-args=(run --rm --user tester -v "$REPO:/repo:ro" -w /repo/install/tests)
-# Rootless podman remaps uids; keep-id makes the container's uid 1000 the
-# invoking user, so the read-only bind mount stays readable.
-[ "$RT_NAME" = podman ] && args+=(--userns=keep-id)
+args=(run --rm --user tester -v "$REPO:/repo:ro,z" -w /repo/install/tests)
+# Rootless podman remaps uids; keep-id makes the container's tester (uid
+# 1000, per dev/Containerfile) map back to the invoking host user, so the
+# read-only bind mount stays readable. Without the explicit uid=1000,gid=1000
+# this only works by coincidence when the host user's own uid happens to
+# already be 1000 -- plain `keep-id` identity-maps host-uid to the same
+# container-uid, which is only "tester" when they match.
+# `:ro,z` SELinux-relabels the mount for container access; a no-op on a
+# non-SELinux host, needed for the bind mount to be readable at all on an
+# SELinux-enforcing one (common on podman's home turf, Fedora/RHEL).
+[ "$RT_NAME" = podman ] && args+=(--userns=keep-id:uid=1000,gid=1000)
 [ -t 0 ] && [ -t 1 ] && args+=(-it)
 
 if [ "$shell" = y ]; then
