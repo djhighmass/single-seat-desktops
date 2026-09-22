@@ -1,0 +1,60 @@
+# Debian trixie image for developing/testing this project off-device.
+# Shared by install/tests/test-in-container.sh (runs the test suite) and
+# dev/dev-session.sh (a visible nested wayfire desktop).
+#
+# Build context is dev/ (this directory):
+#   docker build -t single-seat-desktops-dev dev/
+#
+# The repo itself is never COPY'd in -- both scripts bind-mount it at
+# /repo, so edits on the host show up immediately with no rebuild.
+FROM debian:trixie
+
+ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
+
+# The installer's own package superset (10-install-wayfire-desktops.sh's
+# pkg_ensure line) is baked in so its pkg_ensure is a no-op here and the
+# container needs no network at run time. The rest is what the tests and
+# a nested session need that a real Debian Linux Terminal VM already has:
+# sudo/adduser/git/procps for the tests, dbus + xkb-data + fonts/icons for
+# wf-panel/foot to render, xauth-less (auth is staged by the host script).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      wayfire wf-shell foot seatd grim jq curl yad synaptic lxpolkit \
+      polkitd pkexec wlr-randr \
+      sudo adduser git ca-certificates procps psmisc util-linux \
+      dbus dbus-bin dbus-daemon xkb-data \
+      adwaita-icon-theme fonts-dejavu-core fonts-noto-color-emoji \
+      less nano python3 librsvg2-common \
+    && rm -rf /var/lib/apt/lists/*
+
+# No systemd in a container. The installer and wayfire-customize.sh call
+# systemctl/loginctl unconditionally under `set -e`; these no-op shims
+# (see the files for what they answer) let those scripts run unmodified.
+# /usr/local/bin precedes /usr/bin in PATH, including sudo's secure_path.
+COPY systemctl loginctl /usr/local/bin/
+
+# The installer does `usermod -aG render`; on a real Debian box systemd's
+# udev package creates that group, and there is no udev here.
+RUN groupadd -r render
+
+# uid 1000 matches the usual host uid so the bind-mounted repo is readable.
+#   tester -- runs the test suite
+#   droid  -- the "host account" the installer prompts for (its default)
+#   wftest -- the account the nested session's wayfire runs as
+RUN useradd -m -u 1000 -s /bin/bash tester \
+ && useradd -m -u 1001 -s /bin/bash droid \
+ && useradd -m -u 1002 -s /bin/bash wftest \
+ && for u in tester droid wftest; do \
+      echo "$u ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/90-$u" \
+      && chmod 440 "/etc/sudoers.d/90-$u"; \
+    done \
+ && git config --system --add safe.directory '*'
+
+# Nested-session plumbing (only used by dev/dev-session.sh).
+COPY session-entrypoint.sh session-loop.sh bootstrap-wayfire.ini motd /usr/local/lib/dev-session/
+COPY dev-restart dev-install dev-customize /usr/local/bin/
+RUN chmod 755 /usr/local/bin/systemctl /usr/local/bin/loginctl \
+      /usr/local/bin/dev-restart /usr/local/bin/dev-install /usr/local/bin/dev-customize \
+      /usr/local/lib/dev-session/session-entrypoint.sh /usr/local/lib/dev-session/session-loop.sh
+
+WORKDIR /repo
+CMD ["bash"]

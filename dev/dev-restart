@@ -1,0 +1,3 @@
+#!/bin/bash
+# Restart the nested wayfire (session-loop.sh relaunches it).
+touch /run/dev-session/restart && pkill -x wayfire

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Container-only shim (see tests/Containerfile). There is no systemd in
+# the dev/test container, but the installer and wayfire-customize.sh call
+# `systemctl ...` unconditionally. Pretend every state-changing verb
+# succeeded; answer "no such unit" to the query verbs the scripts branch on.
+verb=""
+for a in "$@"; do
+  case "$a" in -*) ;; *) verb="$a"; break ;; esac
+done
+case "$verb" in
+  cat|status|is-active|is-enabled|is-failed|show) exit 1 ;;
+esac
+echo "[container shim] systemctl $* -- no systemd here, ignored" >&2
+exit 0
