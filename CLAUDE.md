@@ -43,6 +43,27 @@ WF_TESTS_ALLOW_SHARED_BOX=1 bash install/tests/functional/test_core_installer.sh
 bash install/tests/run.sh disruptive
 ```
 
+**No real hardware or Linux Terminal VM handy?** `dev/` has container-based
+tooling for developing off-device (a regular Linux laptop, X11 or Wayland):
+
+```sh
+# unit+functional suite in a Debian trixie container -- no systemd,
+# seatd, or real accounts needed on the host
+install/tests/test-in-container.sh
+
+# a full, visible wayfire desktop -- panel, background, app menu -- as
+# a window on your own desktop. Auto-detects X11 vs. Wayland; nothing
+# to declare. dev-install/dev-restart/dev-customize inside the session
+# drive the real installer/wayfire-customize.sh against a throwaway
+# wftest account.
+dev/dev-session.sh
+```
+
+Neither changes any install/ script's behavior -- see `dev/Containerfile`
+for the systemd/seatd/udev-group shims this needed (no systemd, no real
+DRM hardware or GPU vendor driver in a container) and `dev/dev-session.sh`'s
+own header for the X11/Wayland detection + uid-remap details.
+
 **Before ever running `install/tests/disruptive/test_switch_desktop.sh`
 or manually invoking `/usr/local/bin/switch-desktop.sh` yourself as an
 agent**: check `cat /proc/$$/cgroup` first. If it shows a
