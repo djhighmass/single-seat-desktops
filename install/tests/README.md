@@ -95,6 +95,17 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   deletes a disposable account) -- the sudoers write-order fix: a failing
   `visudo` must never leave a file in `/etc/sudoers.d/`, and a passing
   one must install something `visudo` itself accepts.
+- **functional/test_wf_shell_supervisor.sh** -- the real supervisor
+  against stub panel/background commands and a `sleep` standing in for
+  the compositor: a client that exits is restarted and the output mode
+  re-applied, a crash-looping one is given up on, nothing restarts once
+  the compositor is gone, and only the display variables actually set
+  get published (through a stub, never the real user's environment).
+- **functional/test_wayfire_ini_migration.sh** (needs sudo; creates and
+  deletes a disposable account) -- an earlier installer's `wayfire.ini`
+  gains the newer core settings, keeps everything else (including a
+  `term1` line), stays user-owned, is backed up once, is untouched by a
+  second run, and still loads under a real headless wayfire.
 - **functional/test_repo_hygiene.sh** -- sweeps the actual publish
   surface (git-tracked + untracked-but-not-ignored files, from the repo
   root down) for personal identifiers, plus a syntax check on every
