@@ -40,6 +40,45 @@ backup_file() {
 user_home() { getent passwd "$1" | cut -d: -f6; }
 user_uid()  { id -u "$1"; }
 
+# Core wayfire.ini settings that a file from an older installer lacks:
+# foreign-toplevel (the panel's window list) and the panel supervisor in
+# place of wayfire's one-shot autostart_wf_shell.
+CORE_PLUGIN_ADD=foreign-toplevel
+CORE_SHELL_CMD=/usr/local/bin/wf-shell-supervisor.sh
+
+ensure_core_wayfire_ini() {
+  # ensure_core_wayfire_ini <user> <path> -- adds the settings above to an
+  # existing wayfire.ini, leaving every other line as is. Backs up and
+  # rewrites only if something changes.
+  local u="$1" ini="$2" tmp
+  [ -f "$ini" ] || return 0
+  tmp="$(mktemp)"
+  awk -v plugin="$CORE_PLUGIN_ADD" -v shell_cmd="$CORE_SHELL_CMD" '
+    function emit_autostart() {
+      print "autostart_wf_shell = false"
+      print "shell = " shell_cmd
+    }
+    /^\[.*\]/ { section = $0 }
+    section == "[core]" && /^plugins *=/ {
+      n = split($0, w, /[ \t]+/); found = 0
+      for (i = 1; i <= n; i++) if (w[i] == plugin) found = 1
+      if (!found) $0 = $0 " " plugin
+    }
+    section == "[autostart]" && /^(autostart_wf_shell|shell) *=/ { next }
+    { print }
+    $0 == "[autostart]" { emit_autostart(); seen_autostart = 1 }
+    END { if (!seen_autostart) { print ""; print "[autostart]"; emit_autostart() } }
+  ' "$ini" > "$tmp"
+  if cmp -s "$tmp" "$ini"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  backup_file "$ini"
+  write_owned_file "$u" "$ini" 644 < "$tmp"
+  rm -f "$tmp"
+  log "$u: updated core wayfire.ini settings (panel supervision, window list) -- previous copy backed up"
+}
+
 write_owned_file() {
   # write_owned_file <user> <path> <mode> <<'EOF' ... EOF
   local u="$1" path="$2" mode="$3"

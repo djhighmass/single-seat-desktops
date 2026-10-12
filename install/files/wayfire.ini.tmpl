@@ -1,7 +1,9 @@
 [core]
-plugins = autostart wayfire-shell resize move grid wobbly decoration place
+plugins = autostart wayfire-shell resize move grid wobbly decoration place foreign-toplevel
 
 [autostart]
+autostart_wf_shell = false
+shell = /usr/local/bin/wf-shell-supervisor.sh
 fix_output = /usr/local/bin/fix-output-mode.sh
 polkit_agent = lxpolkit
 
