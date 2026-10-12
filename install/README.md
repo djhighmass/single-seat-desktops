@@ -130,6 +130,11 @@ Safe to re-run any time. What happens on a second run differs by step:
   re-prompting and clobbering it. Their `wayfire-customize.sh` choices
   live in a separate file and are never touched by this script either
   way.
+- **One exception, always reapplied**: `foreign-toplevel` in `[core]
+  plugins`, and `autostart_wf_shell = false` plus `shell =
+  wf-shell-supervisor.sh` under `[autostart]`. A re-run adds just these
+  to an existing `wayfire.ini` (backing it up first, only if it changes);
+  every other line, including `term1`, is left alone.
 
 To force a specific reconfiguration pass (e.g. a different timezone),
 re-run with:
@@ -217,6 +222,21 @@ parent project for the full history):
   someone else's preference questions, and a user can rebuild their own
   setup from `~/.config/wayfire-customize.conf` any time without needing
   the installer at all.
+- **The panel and background are supervised.** The display is
+  virtio-gpu output mirroring an Android window, so every resize, rotate
+  or dock reconnects it and kills `wf-panel`/`wf-background`; `wf-panel`
+  can also abort in GTK/cairo. wayfire's `autostart_wf_shell` starts them
+  only once. `wf-shell-supervisor.sh` restarts them, re-runs
+  `fix-output-mode.sh` after a restart, gives up on a crash loop, and
+  logs to `~/.cache/wf-shell-supervisor.log`.
+- **Display variables are published to the user's activation
+  environment.** wayfire runs under `systemd-run`, so the user's service
+  manager lacks `WAYLAND_DISPLAY`/`DISPLAY`; `xdg-desktop-portal-gtk`
+  then fails and every GTK app waits out a 25s D-Bus timeout at startup.
+  The supervisor publishes them first (panel start: ~25s → ~0.4s).
+- **The window list needs `foreign-toplevel`.** Without it the panel's
+  window-list widget disables itself, leaving no way to switch windows
+  (Super doesn't reach the guest, and no switcher plugin is loaded).
 - **`wf-panel`/`wf-background` read `~/.config/wf-shell.ini`, not
   `wayfire.ini`.** They're a separate GTK application (`wf-shell`) with
   their own config file and their own `wf-config` parser; nothing you put
@@ -258,6 +278,9 @@ install/
                                    in per user at customize time
     panel-weather.sh              weather panel script, same deployment
     owf-weather.service/.timer    systemd --user units, same deployment
+    wf-shell-supervisor.sh        deployed to /usr/local/bin -- started from
+                                   each user's wayfire.ini [autostart];
+                                   keeps wf-panel/wf-background running
     set-background.sh             deployed to /usr/local/bin -- GUI (yad)
                                    wallpaper picker + restart, shared
     set-background.desktop        deployed once, same pattern as

@@ -113,6 +113,7 @@ log "installing shared app-menu tools (background picker, desktop customizer)"
 install -d -o root -g root -m 755 /usr/local/share/applications
 install -o root -g root -m 755 files/set-background.sh /usr/local/bin/set-background.sh
 install -o root -g root -m 755 files/fix-output-mode.sh /usr/local/bin/fix-output-mode.sh
+install -o root -g root -m 755 files/wf-shell-supervisor.sh /usr/local/bin/wf-shell-supervisor.sh
 install -o root -g root -m 755 files/wayland-share-check.sh /usr/local/bin/wayland-share-check.sh
 install -o root -g root -m 644 files/set-background.desktop /usr/local/share/applications/set-background.desktop
 install -o root -g root -m 755 files/wayfire-customize.sh /usr/local/bin/wayfire-customize.sh
@@ -194,6 +195,9 @@ onboard_user() {
   loginctl enable-linger "$u"
   for _ in $(seq 1 10); do [ -d "/run/user/$uid" ] && break; sleep 0.5; done
   [ -d "/run/user/$uid" ] || warn "/run/user/$uid didn't appear yet -- it should on next login/reboot"
+
+  # Existing wayfire.ini files are otherwise left alone (see common.sh).
+  [ "$FORCE_CUSTOMIZATIONS" = y ] || ensure_core_wayfire_ini "$u" "$home/.config/wayfire.ini"
 
   if [ -f "$home/.config/wayfire.ini" ] && [ "$FORCE_CUSTOMIZATIONS" != y ]; then
     log "$u already has a wayfire.ini -- leaving their core desktop in place."

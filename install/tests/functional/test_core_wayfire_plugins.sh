@@ -32,10 +32,13 @@ TEMPLATE="$(cd ../.. && pwd)/files/wayfire.ini.tmpl"
 # process, and without its own runtime dir it shares the real one's
 # Wayland socket directory and session D-Bus, disrupting any already-
 # running compositor's own D-Bus-activated clients (e.g. wf-background)
-# on the same account.
+# on the same account. HOME and the bus are scratch too, so the
+# autostarted wf-shell-supervisor.sh can't touch the real account's log
+# or activation environment.
 out="$(timeout 4 env WLR_BACKENDS=headless WLR_RENDERER=pixman \
   WLR_RENDER_DRM_DEVICE="$RENDER_NODE" WAYFIRE_CONFIG_FILE="$TEMPLATE" \
-  XDG_RUNTIME_DIR="$SCRATCH" \
+  XDG_RUNTIME_DIR="$SCRATCH" HOME="$SCRATCH" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=$SCRATCH/no-bus" \
   wayfire 2>&1)"
 
 assert_not_contains "the core template's plugin list loads cleanly under a real wayfire" \
