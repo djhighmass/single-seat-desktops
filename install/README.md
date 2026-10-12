@@ -34,6 +34,23 @@ sudo ./00-create-users.sh alice bob carol
 sudo ./10-install-wayfire-desktops.sh
 ```
 
+For scripted rebuilds, both take their answers as flags instead:
+
+```sh
+sudo ./00-create-users.sh --sudo-level=3 alice   # 1 none, 2 password, 3 passwordless
+sudo ./10-install-wayfire-desktops.sh --host=droid --users=alice,bob \
+    --timezone=alice:Europe/Berlin --timezone=bob:America/Chicago
+```
+
+`--users` makes the core installer ask nothing at all. Each name must be
+an account the interactive picker would have listed, and each timezone
+must exist under `/usr/share/zoneinfo` (users without one get the system
+default); anything invalid aborts the run before it changes anything.
+`adduser`'s own password prompt is the one question `00-create-users.sh`
+still asks, so passwords never have to live in a script or file. The
+interactive timezone prompt re-asks on a name that doesn't exist, since
+a misspelled zone silently becomes UTC.
+
 `10-install-wayfire-desktops.sh` sets up the **core desktop only** — enough
 for a working, switchable session with a panel, background, policy agent,
 and app menu. It deliberately does not ask about a terminal, weather,

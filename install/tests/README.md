@@ -106,6 +106,11 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   gains the newer core settings, keeps everything else (including a
   `term1` line), stays user-owned, is backed up once, is untouched by a
   second run, and still loads under a real headless wayfire.
+- **functional/test_noninteractive_validation.sh** (needs sudo) -- a
+  misspelled timezone, an unknown or host account, a stray `--timezone`,
+  or a bad `--sudo-level` each abort with a reason before any package
+  install or `adduser`. The success path is in `test_core_installer.sh`
+  (gated).
 - **functional/test_repo_hygiene.sh** -- sweeps the actual publish
   surface (git-tracked + untracked-but-not-ignored files, from the repo
   root down) for personal identifiers, plus a syntax check on every
