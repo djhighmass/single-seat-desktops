@@ -58,15 +58,22 @@ ensure_core_wayfire_ini() {
       print "autostart_wf_shell = false"
       print "shell = " shell_cmd
     }
-    /^\[.*\]/ { section = $0 }
-    section == "[core]" && /^plugins *=/ {
-      n = split($0, w, /[ \t]+/); found = 0
-      for (i = 1; i <= n; i++) if (w[i] == plugin) found = 1
-      if (!found) $0 = $0 " " plugin
+    # Matching is on the line as wayfire reads it: comment and surrounding
+    # whitespace stripped. Lines are printed as written.
+    function bare(s) { sub(/[ \t]*#.*/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    { line = bare($0) }
+    line ~ /^\[.*\]$/ { section = line }
+    section == "[core]" && line ~ /^plugins[ \t]*=/ {
+      n = split(line, w, /[ \t=]+/); found = 0
+      for (i = 2; i <= n; i++) if (w[i] == plugin) found = 1
+      if (!found) {
+        if (match($0, /[ \t]*#/)) $0 = substr($0, 1, RSTART - 1) " " plugin substr($0, RSTART)
+        else $0 = $0 " " plugin
+      }
     }
-    section == "[autostart]" && /^(autostart_wf_shell|shell) *=/ { next }
+    section == "[autostart]" && line ~ /^(autostart_wf_shell|shell)[ \t]*=/ { next }
     { print }
-    $0 == "[autostart]" { emit_autostart(); seen_autostart = 1 }
+    line == "[autostart]" && !seen_autostart { emit_autostart(); seen_autostart = 1 }
     END { if (!seen_autostart) { print ""; print "[autostart]"; emit_autostart() } }
   ' "$ini" > "$tmp"
   if cmp -s "$tmp" "$ini"; then

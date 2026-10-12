@@ -88,4 +88,24 @@ else
   echo "  skip - no readable $RENDER_NODE or wayfire not installed (headless load check)"
 fi
 
+# A hand-edited file: indented keys and trailing comments, which wayfire
+# accepts.
+HAND="$H/.config/hand-edited.ini"
+{
+  echo "[core]"
+  echo "  plugins = autostart wayfire-shell move  # trimmed"
+  echo
+  echo "[autostart]   # my startup apps"
+  echo "  shell = wf-panel"
+  echo "polkit_agent = lxpolkit"
+} | sudo -n -u "$TESTUSER" tee "$HAND" >/dev/null
+sudo -n bash -c "$funcs"$'\n'"ensure_core_wayfire_ini '$TESTUSER' '$HAND'" >/dev/null 2>&1
+hand="$(sudo -n cat "$HAND")"
+assert_contains "the plugin goes before a trailing comment, not inside it" \
+  "$hand" "plugins = autostart wayfire-shell move foreign-toplevel  # trimmed"
+assert_eq "a commented [autostart] header is found, not duplicated" \
+  "$(grep -c '^\[autostart\]' <<< "$hand")" "1"
+assert_not_contains "an indented old shell line is replaced" "$hand" "shell = wf-panel"
+assert_contains "the header's comment is kept" "$hand" "[autostart]   # my startup apps"
+
 summarize_and_exit
