@@ -95,6 +95,11 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   deletes a disposable account) -- the sudoers write-order fix: a failing
   `visudo` must never leave a file in `/etc/sudoers.d/`, and a passing
   one must install something `visudo` itself accepts.
+- **functional/test_user_dirs_ownership.sh** (needs sudo; creates and
+  deletes a disposable account) -- every directory `ensure_user_dirs`
+  creates is the user's: they can create under `~/.local/share` on a
+  fresh home and on one with a root-owned `~/.local`, and a symlink is
+  never chowned through.
 - **functional/test_wf_shell_supervisor.sh** -- the real supervisor
   against stub panel/background commands and a `sleep` standing in for
   the compositor: a client that exits is restarted and the output mode

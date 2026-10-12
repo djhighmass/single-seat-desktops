@@ -40,6 +40,32 @@ backup_file() {
 user_home() { getent passwd "$1" | cut -d: -f6; }
 user_uid()  { id -u "$1"; }
 
+ensure_user_dirs() {
+  # ensure_user_dirs <user> <home> <relpath>... -- creates each <home>/<relpath>
+  # with every component owned by <user> (`install -d -o` owns only the
+  # last one), re-owning any root-owned component. Symlinks are left alone.
+  local u="$1" home="$2" rel cur part
+  local -a parts
+  shift 2
+  for rel in "$@"; do
+    cur="$home"
+    IFS=/ read -ra parts <<< "$rel"
+    for part in "${parts[@]}"; do
+      [ -n "$part" ] || continue
+      cur="$cur/$part"
+      if [ -L "$cur" ]; then
+        warn "$cur is a symlink -- leaving it and its ownership alone"
+        break
+      elif [ ! -e "$cur" ]; then
+        install -d -o "$u" -g "$u" -m 755 "$cur"
+      elif [ -d "$cur" ] && [ "$(stat -c %u "$cur")" = 0 ]; then
+        log "repairing root-owned $cur -> $u"
+        chown -h "$u:$u" "$cur"
+      fi
+    done
+  done
+}
+
 # Core wayfire.ini settings that a file from an older installer lacks:
 # foreign-toplevel (the panel's window list) and the panel supervisor in
 # place of wayfire's one-shot autostart_wf_shell.
