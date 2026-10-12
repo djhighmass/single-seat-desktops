@@ -47,6 +47,17 @@ out="$(env "${FAST_TIMING[@]}" MODE=foreground SOCK_PATH="$SCRATCH/never/wayland
 assert_contains "foreground mode reports synchronously when the socket never appears" \
   "$out" "never appeared"
 
+# --- foreground: the socket appears a moment after the check starts ---
+# Fails with "never appeared" if inotify-tools isn't installed.
+
+mkdir -p "$SCRATCH/rundir-late"
+( sleep 1; make_fake_socket "$SCRATCH/rundir-late/wayland-0" ) &
+out="$(env "${FAST_TIMING[@]}" INOTIFY_TIMEOUT=5 MODE=foreground \
+  SOCK_PATH="$SCRATCH/rundir-late/wayland-0" bash "$SCRIPT" 2>&1)"
+wait
+assert_contains "foreground mode waits for a socket that appears after it starts" \
+  "$out" "[wayland-share] OK"
+
 # --- background + log: result lands in the log, nothing printed -------
 
 export HOME="$SCRATCH/home-log"

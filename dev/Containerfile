@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 # wf-panel/foot to render, xauth-less (auth is staged by the host script).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       wayfire wf-shell foot seatd grim jq curl yad synaptic lxpolkit \
-      polkitd pkexec wlr-randr \
+      polkitd pkexec wlr-randr inotify-tools \
       sudo adduser git ca-certificates procps psmisc util-linux \
       dbus dbus-bin dbus-daemon xkb-data \
       adwaita-icon-theme fonts-dejavu-core fonts-noto-color-emoji \
