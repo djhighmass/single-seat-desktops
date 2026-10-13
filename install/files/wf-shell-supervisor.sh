@@ -38,16 +38,18 @@ log() { echo "$(date '+%F %T') [wf-shell-supervisor] $*"; }
 
 # The compositor's pid+name distinguish "a client died" (restart) from
 # "the session ended" (stop). wayfire's autostart detaches its children
-# (re-parented to init), so it is looked up in this session's cgroup,
-# not among this script's ancestors.
+# (re-parented to init), so it is looked up in this session's cgroup
+# (cgroup v2 unified hierarchy), not among this script's ancestors.
 COMPOSITOR_NAME="${COMPOSITOR_NAME:-wayfire}"
 find_compositor() {
   local cg pid
-  cg="/sys/fs/cgroup$(cut -d: -f3- /proc/self/cgroup 2>/dev/null | head -1)"
-  for pid in $(cat "$cg/cgroup.procs" 2>/dev/null); do
-    [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$COMPOSITOR_NAME" ] && { echo "$pid"; return; }
-  done
-  pgrep -u "$(id -u)" -xo "$COMPOSITOR_NAME" || echo "$PPID"
+  cg="$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)"
+  if [ -n "$cg" ]; then
+    while read -r pid; do
+      [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "$COMPOSITOR_NAME" ] && { echo "$pid"; return; }
+    done < "/sys/fs/cgroup$cg/cgroup.procs"
+  fi
+  echo "$PPID"
 }
 COMPOSITOR_PID="${COMPOSITOR_PID:-$(find_compositor)}"
 COMPOSITOR_COMM="$(cat "/proc/$COMPOSITOR_PID/comm" 2>/dev/null)"
