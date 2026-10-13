@@ -60,8 +60,8 @@ their own app menu to pick whichever of those they personally want,
 whenever they want (see below). Concretely, the core installer will:
 
 1. Install prerequisites (`wayfire`, `wf-shell`, `foot`, `seatd`, `grim`,
-   `jq`, `curl`, plus everything the shared tools below need — `yad`,
-   `synaptic`, `lxpolkit`, `policykit-1` — installed for everyone up
+   `jq`, `curl`, `inotify-tools`, plus everything the shared tools below
+   need — `yad`, `synaptic`, `lxpolkit`, `policykit-1` — installed for everyone up
    front so nothing later ever needs root) and start `seatd`,
    auto-detecting which group it actually runs as rather than assuming
    `video`.

@@ -159,7 +159,8 @@ fi
 # if this specific split ever gets reverted or renamed again, that's the
 # next thing to check here.
 log "installing shared prerequisites"
-pkg_ensure wayfire wf-shell foot seatd grim jq curl yad synaptic lxpolkit polkitd pkexec wlr-randr
+# inotify-tools: wayland-share-check.sh waits for weston.socket with inotifywait.
+pkg_ensure wayfire wf-shell foot seatd grim jq curl yad synaptic lxpolkit polkitd pkexec wlr-randr inotify-tools
 
 command -v curl >/dev/null || die "curl failed to install -- check apt/network and re-run"
 
