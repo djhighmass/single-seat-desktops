@@ -61,8 +61,9 @@ cleanup() {
   # .bash_aliases as part of onboarding -- that's real, shared, persistent
   # state on whatever machine this runs on, not scoped to the throwaway
   # account, so it needs cleaning up here too rather than just deleting
-  # the account.
-  sudo -n bash -c "grep -v \"^alias ${TESTUSER}-wayfire=\" '$ALIASES_FILE' > '${ALIASES_FILE}.cleanup-tmp' 2>/dev/null; mv '${ALIASES_FILE}.cleanup-tmp' '$ALIASES_FILE'" 2>/dev/null
+  # the account. Written back with cat >, not mv, so the host keeps
+  # owning the file.
+  sudo -n bash -c "grep -v \"^alias ${TESTUSER}-wayfire=\" '$ALIASES_FILE' > '${ALIASES_FILE}.cleanup-tmp' 2>/dev/null && cat '${ALIASES_FILE}.cleanup-tmp' > '$ALIASES_FILE'; rm -f '${ALIASES_FILE}.cleanup-tmp'" 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -106,18 +107,28 @@ assert_success "--force-new-user-customizations leaves a backup behind" -- \
 backup="$(sudo -n bash -c 'cat /home/'"$TESTUSER"'/.config/wf-shell.ini.bak-*')"
 assert_eq "the backup actually preserves the pre-force content" "$backup" "$before"
 
+# Stdin is closed, so any prompt would hit EOF and fail the run. --force
+# regenerates the timezone.
+assert_success "non-interactive run (--users/--host/--timezone, stdin closed) completes" -- \
+  sudo -n bash "$INSTALL_DIR/10-install-wayfire-desktops.sh" --force-new-user-customizations \
+    --host="$HOST_USER" --users="$TESTUSER" "--timezone=$TESTUSER:America/Chicago" </dev/null
+assert_eq "--timezone=USER:TZ is what lands in that user's timezone file" \
+  "$(sudo -n cat "/home/$TESTUSER/.config/timezone")" "America/Chicago"
+
 # Regression test: the alias text contains a literal `&` (from
 # "... & disown"), which sed's replacement syntax treats as "insert
 # the whole matched line here" if unescaped -- a sed-replace-in-place
 # alias writer would corrupt the line a little more on every re-run
-# for the same user instead of just updating it. Three runs above
+# for the same user instead of just updating it. Four runs above
 # exercises exactly that; this checks the real, shared host file
 # actually came out clean.
 alias_lines="$(sudo -n grep -c "^alias ${TESTUSER}-wayfire=" "$ALIASES_FILE")"
-assert_eq "exactly one alias line for the throwaway user after 3 runs, not a growing pile" \
+assert_eq "exactly one alias line for the throwaway user after 4 runs, not a growing pile" \
   "$alias_lines" "1"
 assert_eq "the alias line is well-formed, not nested/duplicated" \
   "$(sudo -n grep "^alias ${TESTUSER}-wayfire=" "$ALIASES_FILE")" \
   "alias ${TESTUSER}-wayfire='/usr/local/bin/switch-desktop.sh ${TESTUSER} & disown; sudo su - ${TESTUSER}'"
+assert_eq "the host still owns its .bash_aliases after the installer rewrote it" \
+  "$(stat -c %U "$ALIASES_FILE")" "$HOST_USER"
 
 summarize_and_exit

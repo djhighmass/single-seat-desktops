@@ -3,8 +3,12 @@
 # desktop needs already exist, creating any that don't via adduser.
 #
 #   sudo ./00-create-users.sh alice bob carol
+#   sudo ./00-create-users.sh --sudo-level=3 alice
 #
-# With no args, prompts for a space-separated username list. Existing
+# With no usernames, prompts for a space-separated list. --sudo-level=N
+# (1 none, 2 password-required, 3 passwordless, as in the prompt) answers
+# the sudo question for every account created, leaving only adduser's
+# password prompt. Existing
 # accounts are left completely untouched (including their sudo config) --
 # this script only ever adds new users, never modifies established ones.
 # Run 10-install-wayfire-desktops.sh afterwards to wire accounts up as
@@ -35,10 +39,19 @@ install_nopasswd_sudoers() {
 main() {
   require_root
 
-  local USERNAMES=()
-  if [ "$#" -gt 0 ]; then
-    USERNAMES=("$@")
-  else
+  local USERNAMES=() SUDO_LEVEL="" arg
+  for arg in "$@"; do
+    case "$arg" in
+      --sudo-level=*)
+        SUDO_LEVEL="${arg#--sudo-level=}"
+        [[ "$SUDO_LEVEL" =~ ^[123]$ ]] || die "--sudo-level must be 1, 2 or 3 (got: $SUDO_LEVEL)"
+        ;;
+      -*) die "unknown option: $arg" ;;
+      *) USERNAMES+=("$arg") ;;
+    esac
+  done
+
+  if [ "${#USERNAMES[@]}" -eq 0 ]; then
     read -rp "Usernames to ensure exist (space-separated): " -a USERNAMES
   fi
 
@@ -54,12 +67,16 @@ main() {
     log "creating $u"
     adduser --gecos "" "$u"
 
-    echo "Sudo level for $u:"
-    echo "  1) none"
-    echo "  2) password-required (member of the 'sudo' group)"
-    echo "  3) passwordless (member of 'sudo' + a NOPASSWD:ALL sudoers.d entry)"
-    read -rp "Choice [1]: " level
-    level="${level:-1}"
+    if [ -n "$SUDO_LEVEL" ]; then
+      level="$SUDO_LEVEL"
+    else
+      echo "Sudo level for $u:"
+      echo "  1) none"
+      echo "  2) password-required (member of the 'sudo' group)"
+      echo "  3) passwordless (member of 'sudo' + a NOPASSWD:ALL sudoers.d entry)"
+      read -rp "Choice [1]: " level
+      level="${level:-1}"
+    fi
     case "$level" in
       2) usermod -aG sudo "$u" ;;
       3) install_nopasswd_sudoers "$u" ;;

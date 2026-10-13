@@ -6,6 +6,13 @@
 # exist, it never creates one.
 #
 #   sudo ./10-install-wayfire-desktops.sh [--force-new-user-customizations]
+#   sudo ./10-install-wayfire-desktops.sh --users=alice,bob [--host=droid] \
+#        [--timezone=alice:Europe/Berlin ...] [--force-new-user-customizations]
+#
+# --users runs with no prompts. The host defaults to droid unless --host
+# is given; every named account must be one the interactive picker would
+# list (no 'all'); each user's timezone comes from --timezone=USER:TZ or
+# the system default. Any invalid value aborts before the system changes.
 #
 # Model: one "host" account (default droid) stays on weston permanently as
 # the stable base. Every other selected account gets its own wayfire
@@ -44,9 +51,19 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 source lib/common.sh
 
 FORCE_CUSTOMIZATIONS=n
+NONINTERACTIVE=n
+HOST_USER=""
+USERS_ARG=""
+declare -A TZ_FOR=()
 for arg in "$@"; do
   case "$arg" in
     --force-new-user-customizations) FORCE_CUSTOMIZATIONS=y ;;
+    --host=*) HOST_USER="${arg#--host=}" ;;
+    --users=*) USERS_ARG="${arg#--users=}"; NONINTERACTIVE=y ;;
+    --timezone=*:*)
+      tzarg="${arg#--timezone=}"
+      TZ_FOR["${tzarg%%:*}"]="${tzarg#*:}"
+      ;;
     -h|--help)
       grep '^#' "${BASH_SOURCE[0]}" | sed '1d;s/^# \{0,1\}//'
       exit 0
@@ -57,7 +74,76 @@ done
 
 require_root
 
+if [ "$NONINTERACTIVE" != y ] && { [ -n "$HOST_USER" ] || [ "${#TZ_FOR[@]}" -gt 0 ]; }; then
+  die "--host/--timezone only apply with --users (non-interactive mode)"
+fi
+
 DEFAULT_TZ="$(cat /etc/timezone 2>/dev/null || echo UTC)"
+
+# An unknown zone name silently becomes UTC, so it is rejected up front.
+valid_tz() { [ -n "$1" ] && [ -f "/usr/share/zoneinfo/$1" ]; }
+
+if [ "$NONINTERACTIVE" = y ]; then
+  for u in "${!TZ_FOR[@]}"; do
+    valid_tz "${TZ_FOR[$u]}" || die "--timezone=$u:${TZ_FOR[$u]} -- no such timezone in /usr/share/zoneinfo"
+  done
+fi
+
+# ------------------------------------------------------------- host user --
+
+if [ "$NONINTERACTIVE" != y ]; then
+  read -rp "Host account that stays on weston as the stable base [droid]: " HOST_USER
+fi
+HOST_USER="${HOST_USER:-droid}"
+id "$HOST_USER" &>/dev/null || die "host account '$HOST_USER' doesn't exist -- create it first"
+
+# --------------------------------------------------------- pick accounts --
+
+mapfile -t CANDIDATES < <(awk -F: -v host="$HOST_USER" \
+  '$3>=1000 && $3<60000 && $1!=host && $7 !~ /nologin|false/ {print $1}' /etc/passwd)
+
+[ "${#CANDIDATES[@]}" -gt 0 ] || die "no other accounts found -- run 00-create-users.sh first"
+
+SELECTED=()
+if [ "$NONINTERACTIVE" = y ]; then
+  IFS=, read -ra wanted <<< "$USERS_ARG"
+  for w in "${wanted[@]}"; do
+    [ -n "$w" ] || continue
+    found=n
+    for c in "${CANDIDATES[@]}"; do [ "$c" = "$w" ] && found=y; done
+    [ "$found" = y ] || die "--users: '$w' isn't an onboardable account (needs uid 1000-59999, a login shell, and not the host)"
+    SELECTED+=("$w")
+  done
+  [ "${#SELECTED[@]}" -gt 0 ] || die "--users: no account names given"
+  for u in "${!TZ_FOR[@]}"; do
+    found=n
+    for w in "${SELECTED[@]}"; do [ "$w" = "$u" ] && found=y; done
+    [ "$found" = y ] || die "--timezone given for '$u', who isn't in --users"
+  done
+else
+  echo
+  echo "Existing accounts available to onboard as wayfire desktops:"
+  for i in "${!CANDIDATES[@]}"; do printf "  %d) %s\n" "$((i + 1))" "${CANDIDATES[$i]}"; done
+  read -rp "Which to include (numbers, space-separated, or 'all'): " -a picks
+
+  if [ "${picks[0]:-}" = "all" ]; then
+    SELECTED=("${CANDIDATES[@]}")
+  else
+    for p in "${picks[@]}"; do
+      if ! [[ "$p" =~ ^[0-9]+$ ]]; then
+        warn "ignoring invalid pick: $p"
+        continue
+      fi
+      idx=$((p - 1))
+      if [ "$idx" -ge 0 ] && [ "$idx" -lt "${#CANDIDATES[@]}" ]; then
+        SELECTED+=("${CANDIDATES[$idx]}")
+      else
+        warn "ignoring out-of-range pick: $p"
+      fi
+    done
+  fi
+fi
+[ "${#SELECTED[@]}" -gt 0 ] || die "nothing selected"
 
 # ---------------------------------------------------------------- prereqs --
 
@@ -141,43 +227,6 @@ install -o root -g root -m 644 files/panel-weather.sh /usr/local/lib/wayfire-cus
 install -o root -g root -m 644 files/owf-weather.service /usr/local/lib/wayfire-customize/owf-weather.service
 install -o root -g root -m 644 files/owf-weather.timer /usr/local/lib/wayfire-customize/owf-weather.timer
 
-# ------------------------------------------------------------- host user --
-
-read -rp "Host account that stays on weston as the stable base [droid]: " HOST_USER
-HOST_USER="${HOST_USER:-droid}"
-id "$HOST_USER" &>/dev/null || die "host account '$HOST_USER' doesn't exist -- create it first"
-
-# --------------------------------------------------------- pick accounts --
-
-mapfile -t CANDIDATES < <(awk -F: -v host="$HOST_USER" \
-  '$3>=1000 && $3<60000 && $1!=host && $7 !~ /nologin|false/ {print $1}' /etc/passwd)
-
-[ "${#CANDIDATES[@]}" -gt 0 ] || die "no other accounts found -- run 00-create-users.sh first"
-
-echo
-echo "Existing accounts available to onboard as wayfire desktops:"
-for i in "${!CANDIDATES[@]}"; do printf "  %d) %s\n" "$((i + 1))" "${CANDIDATES[$i]}"; done
-read -rp "Which to include (numbers, space-separated, or 'all'): " -a picks
-
-SELECTED=()
-if [ "${picks[0]:-}" = "all" ]; then
-  SELECTED=("${CANDIDATES[@]}")
-else
-  for p in "${picks[@]}"; do
-    if ! [[ "$p" =~ ^[0-9]+$ ]]; then
-      warn "ignoring invalid pick: $p"
-      continue
-    fi
-    idx=$((p - 1))
-    if [ "$idx" -ge 0 ] && [ "$idx" -lt "${#CANDIDATES[@]}" ]; then
-      SELECTED+=("${CANDIDATES[$idx]}")
-    else
-      warn "ignoring out-of-range pick: $p"
-    fi
-  done
-fi
-[ "${#SELECTED[@]}" -gt 0 ] || die "nothing selected"
-
 log "onboarding: ${SELECTED[*]}"
 
 # --------------------------------------------------------- per-user work --
@@ -208,8 +257,16 @@ onboard_user() {
     return
   fi
 
-  read -rp "Timezone for $u [${DEFAULT_TZ}]: " tz
-  tz="${tz:-$DEFAULT_TZ}"
+  if [ "$NONINTERACTIVE" = y ]; then
+    tz="${TZ_FOR[$u]:-$DEFAULT_TZ}"
+  else
+    while :; do
+      read -rp "Timezone for $u [${DEFAULT_TZ}]: " tz
+      tz="${tz:-$DEFAULT_TZ}"
+      valid_tz "$tz" && break
+      warn "'$tz' isn't in /usr/share/zoneinfo (e.g. America/Chicago, Europe/Berlin, UTC) -- try again"
+    done
+  fi
 
   backup_file "$home/.config/wayfire.ini"
   install -o "$u" -g "$u" -m 644 files/wayfire.ini.tmpl "$home/.config/wayfire.ini"
