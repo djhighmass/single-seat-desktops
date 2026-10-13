@@ -95,6 +95,10 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   deletes a disposable account) -- the sudoers write-order fix: a failing
   `visudo` must never leave a file in `/etc/sudoers.d/`, and a passing
   one must install something `visudo` itself accepts.
+- **functional/test_fix_output_mode.sh** -- the real
+  `fix-output-mode.sh` against a stub `wlr-randr`: it keeps the preferred
+  mode's orientation (portrait or landscape), and picks the largest mode
+  overall when none is marked preferred.
 - **functional/test_wf_shell_supervisor.sh** -- the real supervisor
   against stub panel/background commands and a `sleep` standing in for
   the compositor: a client that exits is restarted and the output mode
