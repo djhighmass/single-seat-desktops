@@ -100,6 +100,10 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   creates is the user's: they can create under `~/.local/share` on a
   fresh home and on one with a root-owned `~/.local`, and a symlink is
   never chowned through.
+- **functional/test_fix_output_mode.sh** -- the real
+  `fix-output-mode.sh` against a stub `wlr-randr`: it keeps the preferred
+  mode's orientation (portrait or landscape), and picks the largest mode
+  overall when none is marked preferred.
 - **functional/test_wf_shell_supervisor.sh** -- the real supervisor
   against stub panel/background commands and a `sleep` standing in for
   the compositor: a client that exits is restarted and the output mode
