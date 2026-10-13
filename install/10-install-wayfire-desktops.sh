@@ -196,6 +196,8 @@ onboard_user() {
   for _ in $(seq 1 10); do [ -d "/run/user/$uid" ] && break; sleep 0.5; done
   [ -d "/run/user/$uid" ] || warn "/run/user/$uid didn't appear yet -- it should on next login/reboot"
 
+  # Before the early return below, so re-runs also fix existing homes.
+  ensure_user_dirs "$u" "$home" .config .local/bin .local/share .cache
   # Existing wayfire.ini files are otherwise left alone (see common.sh).
   [ "$FORCE_CUSTOMIZATIONS" = y ] || ensure_core_wayfire_ini "$u" "$home/.config/wayfire.ini"
 
@@ -208,8 +210,6 @@ onboard_user() {
 
   read -rp "Timezone for $u [${DEFAULT_TZ}]: " tz
   tz="${tz:-$DEFAULT_TZ}"
-
-  install -d -o "$u" -g "$u" -m 755 "$home/.config" "$home/.local/bin" "$home/.cache"
 
   backup_file "$home/.config/wayfire.ini"
   install -o "$u" -g "$u" -m 644 files/wayfire.ini.tmpl "$home/.config/wayfire.ini"

@@ -40,6 +40,47 @@ backup_file() {
 user_home() { getent passwd "$1" | cut -d: -f6; }
 user_uid()  { id -u "$1"; }
 
+ensure_user_dirs() {
+  # ensure_user_dirs <user> <home> <relpath>... -- creates each <home>/<relpath>
+  # with every component owned by <user> (`install -d -o` owns only the
+  # last one), re-owning any root-owned component. Symlinks are left alone.
+  # Each component is opened no-follow relative to its already-open parent
+  # and chowned by descriptor, so swapping one for a symlink mid-run can't
+  # redirect root's chown outside the home. perl-base is Essential.
+  local u="$1" home="$2" line
+  shift 2
+  while IFS= read -r line; do
+    case "$line" in
+      "repaired "*) log "repairing root-owned ${line#repaired } -> $u" ;;
+      *) warn "$line" ;;
+    esac
+  done < <(perl - "$(id -u "$u")" "$(id -g "$u")" "$home" "$@" <<'PERL'
+use strict; use warnings;
+use Fcntl qw(O_RDONLY O_DIRECTORY O_NOFOLLOW);
+my ($uid, $gid, $home, @rels) = @ARGV;
+REL: for my $rel (@rels) {
+  my ($dir, $next);
+  sysopen($dir, $home, O_RDONLY | O_DIRECTORY) or do { print "$home: $!\n"; next REL };
+  my $path = $home;
+  for my $part (grep { length } split m{/}, $rel) {
+    $path .= "/$part";
+    chdir($dir) or do { print "$path: $!\n"; next REL };
+    my $created = mkdir($part, 0755);
+    unless (sysopen($next, $part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)) {
+      print -l $part ? "$path is a symlink -- leaving it and its ownership alone\n" : "$path: $!\n";
+      next REL;
+    }
+    if ($created || (stat($next))[4] == 0) {
+      chown($uid, $gid, $next) or do { print "$path: chown: $!\n"; next REL };
+      print "repaired $path\n" unless $created;
+    }
+    $dir = $next;
+  }
+}
+PERL
+)
+}
+
 # Core wayfire.ini settings that a file from an older installer lacks:
 # foreign-toplevel (the panel's window list) and the panel supervisor in
 # place of wayfire's one-shot autostart_wf_shell.
