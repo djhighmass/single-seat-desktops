@@ -44,26 +44,41 @@ ensure_user_dirs() {
   # ensure_user_dirs <user> <home> <relpath>... -- creates each <home>/<relpath>
   # with every component owned by <user> (`install -d -o` owns only the
   # last one), re-owning any root-owned component. Symlinks are left alone.
-  local u="$1" home="$2" rel cur part
-  local -a parts
+  # Each component is opened no-follow relative to its already-open parent
+  # and chowned by descriptor, so swapping one for a symlink mid-run can't
+  # redirect root's chown outside the home. perl-base is Essential.
+  local u="$1" home="$2" line
   shift 2
-  for rel in "$@"; do
-    cur="$home"
-    IFS=/ read -ra parts <<< "$rel"
-    for part in "${parts[@]}"; do
-      [ -n "$part" ] || continue
-      cur="$cur/$part"
-      if [ -L "$cur" ]; then
-        warn "$cur is a symlink -- leaving it and its ownership alone"
-        break
-      elif [ ! -e "$cur" ]; then
-        install -d -o "$u" -g "$u" -m 755 "$cur"
-      elif [ -d "$cur" ] && [ "$(stat -c %u "$cur")" = 0 ]; then
-        log "repairing root-owned $cur -> $u"
-        chown -h "$u:$u" "$cur"
-      fi
-    done
-  done
+  while IFS= read -r line; do
+    case "$line" in
+      "repaired "*) log "repairing root-owned ${line#repaired } -> $u" ;;
+      *) warn "$line" ;;
+    esac
+  done < <(perl - "$(id -u "$u")" "$(id -g "$u")" "$home" "$@" <<'PERL'
+use strict; use warnings;
+use Fcntl qw(O_RDONLY O_DIRECTORY O_NOFOLLOW);
+my ($uid, $gid, $home, @rels) = @ARGV;
+REL: for my $rel (@rels) {
+  my ($dir, $next);
+  sysopen($dir, $home, O_RDONLY | O_DIRECTORY) or do { print "$home: $!\n"; next REL };
+  my $path = $home;
+  for my $part (grep { length } split m{/}, $rel) {
+    $path .= "/$part";
+    chdir($dir) or do { print "$path: $!\n"; next REL };
+    my $created = mkdir($part, 0755);
+    unless (sysopen($next, $part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)) {
+      print -l $part ? "$path is a symlink -- leaving it and its ownership alone\n" : "$path: $!\n";
+      next REL;
+    }
+    if ($created || (stat($next))[4] == 0) {
+      chown($uid, $gid, $next) or do { print "$path: chown: $!\n"; next REL };
+      print "repaired $path\n" unless $created;
+    }
+    $dir = $next;
+  }
+}
+PERL
+)
 }
 
 # Core wayfire.ini settings that a file from an older installer lacks:
