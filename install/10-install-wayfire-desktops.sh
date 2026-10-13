@@ -114,6 +114,7 @@ if [ "$NONINTERACTIVE" = y ]; then
     [ "$found" = y ] || die "--users: '$w' isn't an onboardable account (needs uid 1000-59999, a login shell, and not the host)"
     SELECTED+=("$w")
   done
+  [ "${#SELECTED[@]}" -gt 0 ] || die "--users: no account names given"
   for u in "${!TZ_FOR[@]}"; do
     found=n
     for w in "${SELECTED[@]}"; do [ "$w" = "$u" ] && found=y; done

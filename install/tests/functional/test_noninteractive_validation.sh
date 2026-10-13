@@ -33,6 +33,7 @@ rejects() {
     return
   fi
   assert_contains "$desc: says why" "$out" "$want"
+  # Each script's first-action log line: 10-install's, then 00-create-users'.
   assert_not_contains "$desc: stopped before installing anything" "$out" "installing shared prerequisites"
   assert_not_contains "$desc: stopped before creating anyone" "$out" "creating "
 }
@@ -43,6 +44,8 @@ rejects "account that doesn't exist" "isn't an onboardable account" \
   10-install-wayfire-desktops.sh --host="$HOST_USER" --users="$NOSUCH"
 rejects "the host itself as a desktop user" "isn't an onboardable account" \
   10-install-wayfire-desktops.sh --host="$HOST_USER" --users="$HOST_USER"
+rejects "an empty --users list" "no account names given" \
+  10-install-wayfire-desktops.sh --host="$HOST_USER" --users=,,
 # One real onboardable account, to get past the --users check.
 REAL="$(awk -F: -v host="$HOST_USER" \
   '$3>=1000 && $3<60000 && $1!=host && $7 !~ /nologin|false/ {print $1; exit}' /etc/passwd)"
