@@ -85,4 +85,24 @@ assert_eq "the panel isn't restarted after the compositor is gone" "$(count "$SC
 assert_eq "the background isn't restarted after the compositor is gone" "$(count "$SCRATCH/background.starts")" "1"
 kill "$sup" 2>/dev/null
 
+# --- the compositor is found when it isn't an ancestor -----------------
+
+# Like wayfire's autostart: the compositor is not the supervisor's parent.
+rm -f "$SCRATCH"/*.starts
+stub panel 1
+stub background 1
+cp "$(command -v sleep)" "$BIN/fakecomp"
+"$BIN/fakecomp" 30 & compositor=$!
+env -u XDG_CURRENT_DESKTOP -u XDG_SESSION_TYPE LOG="$SCRATCH/lookup.log" PANEL_CMD="$BIN/panel" BACKGROUND_CMD="$BIN/background" \
+  FIX_OUTPUT_CMD=true ENV_PUBLISH_CMD=true PORTAL_RESET_CMD=true COMPOSITOR_NAME=fakecomp \
+  RESTART_DELAY=0.1 WAYLAND_DISPLAY=wayland-test bash "$SCRIPT" &
+sup=$!
+for _ in $(seq 1 30); do grep -q 'session compositor' "$SCRATCH/lookup.log" 2>/dev/null && break; sleep 0.1; done
+assert_contains "the compositor is found by name, not by walking up the parents" \
+  "$(cat "$SCRATCH/lookup.log")" "session compositor: pid $compositor (fakecomp)"
+kill "$compositor"; wait "$compositor" 2>/dev/null
+for _ in $(seq 1 50); do kill -0 "$sup" 2>/dev/null || break; sleep 0.1; done
+assert_failure "and the supervisor stops once that compositor is gone" -- kill -0 "$sup"
+kill "$sup" 2>/dev/null; pkill -f "$BIN/" 2>/dev/null
+
 summarize_and_exit

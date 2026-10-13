@@ -104,7 +104,8 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   against stub panel/background commands and a `sleep` standing in for
   the compositor: a client that exits is restarted and the output mode
   re-applied, a crash-looping one is given up on, nothing restarts once
-  the compositor is gone, and only the display variables actually set
+  the compositor is gone, the compositor is found when it isn't the
+  supervisor's ancestor, and only the display variables actually set
   get published (through a stub, never the real user's environment).
 - **functional/test_wayfire_ini_migration.sh** (needs sudo; creates and
   deletes a disposable account) -- an earlier installer's `wayfire.ini`
