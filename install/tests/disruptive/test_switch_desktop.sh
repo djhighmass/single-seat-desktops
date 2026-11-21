@@ -68,6 +68,14 @@ print('ok' if r == 0 else 'fail')
 " 2>/dev/null)"
 assert_eq "wayfire has a real logind session (the pkexec/lxpolkit fix)" "$sess" "ok"
 
+# --- full repaint: wayfire must be started with -R (see switch-desktop.sh) ---
+# Without it, typing in a shell shows the word being typed erased and retyped on
+# screen on virtio-gpu + pixman. The static test only checks the script text;
+# this checks the command line of the wayfire that actually came up.
+wf_real="$(pgrep -u "$TESTUSER" -x wayfire | head -1)"
+assert_contains "wayfire was started with -R (full repaint)" \
+  "$(tr '\0' ' ' < "/proc/${wf_real}/cmdline" 2>/dev/null)" "wayfire -R"
+
 # --- log file isolation: another onboarded user must not be able to read it ---
 assert_failure "another unprivileged user can't read this user's switch log" -- \
   sudo -n -u nobody cat "/tmp/switch-desktop-${TESTUSER}.log"
