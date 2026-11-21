@@ -18,8 +18,9 @@
 #   sudo ./20-phone-keyboard.sh --user=alice --remove     undo (watcher, autostart, config)
 #   (--no-autostart installs and configures without the systemd user service)
 #
-# SECURITY: pairing gives this VM (that account, and root) an Android shell on
-# the phone: shared storage, screenshots, input injection, app installs. Revoke
+# SECURITY: pairing gives that account (and root) an Android shell on the phone:
+# shared storage, screenshots, input injection, app installs. phone-adb uses a
+# private adb server socket so other accounts on the VM cannot use it. Revoke
 # under Developer options > Wireless debugging > Paired devices.
 #
 # What still needs a human, once per VM (the installer prints these when it
@@ -111,6 +112,10 @@ main() {
   install -m 0755 files/phone-adb "$BIN_DIR/phone-adb"
   log "installed $BIN_DIR/phone-adb"
 
+  # Stop any default adb server this account left on localhost:5037: every account
+  # on the VM can reach it. phone-adb uses its own private socket instead.
+  as_user "$user" adb kill-server >/dev/null 2>&1 || true
+
   if ! as_user "$user" "$BIN_DIR/phone-adb" connect >/dev/null 2>&1; then
     cat <<EOF
 
@@ -131,7 +136,9 @@ EOF
     echo "Keyboards on the phone:"; echo "$installed" | nl -w2 -s'  '
     read -r -p "Which should be used while the Terminal is focused? (number or id) " kb
   fi
-  kb="$(pick_keyboard "$kb" "$installed")" || die "not one of the installed keyboards: $kb"
+  local chosen
+  chosen="$(pick_keyboard "$kb" "$installed")" || die "not one of the installed keyboards: $kb"
+  kb="$chosen"
 
   ensure_user_dirs "$user" "$home" .config/phone-adb
   echo "$kb" | write_owned_file "$user" "$conf" 644

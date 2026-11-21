@@ -28,14 +28,24 @@
 # back then. It is killed if adbd restarts or the phone reboots; kbd-follow
 # re-arms it.
 #
-# SECURITY: pairing gives this VM (the account that paired, and root) an Android
-# shell on the phone: it can read shared storage, take screenshots, inject input
+# SECURITY: pairing gives the account that paired (and root) an Android
+# shell on the phone, through a private adb server socket other accounts cannot open: it can read shared storage, take screenshots, inject input
 # and install apps. Only pair a VM you trust, and revoke it on the phone under
 # Developer options > Wireless debugging > Paired devices.
 #
 # Test hooks: PHONE_ADB_GATEWAY (default: the VM's default gateway) and
 # PHONE_ADB_PORTS (space-separated; skips the scan).
 set -uo pipefail
+
+# Use a PRIVATE adb server (a unix socket in this account's runtime dir) rather
+# than the default one on localhost:5037, which every account on the VM can
+# talk to: with the default, any local user could drive the phone through
+# whoever paired it. Set PHONE_ADB_SHARED_SERVER=1 to use the default anyway.
+if [ -z "${PHONE_ADB_SHARED_SERVER:-}" ]; then
+  RUNDIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+  [ -d "$RUNDIR" ] || { echo "phone-adb: no $RUNDIR (no user session; is lingering enabled for this account?)" >&2; exit 1; }
+  export ADB_SERVER_SOCKET="local:$RUNDIR/phone-adb.sock"
+fi
 
 STATE=${XDG_STATE_HOME:-$HOME/.local/state}/phone-adb
 CONF=${XDG_CONFIG_HOME:-$HOME/.config}/phone-adb/keyboard
@@ -50,6 +60,7 @@ GW=${PHONE_ADB_GATEWAY:-$(ip route 2>/dev/null | awk '/^default/{print $3; exit}
 serial() { adb devices | awk -v g="$GW:" 'index($1,g)==1 && $2=="device"{print $1; exit}'; }
 psh() {
   local s; s=$(serial)
+  [ -n "$s" ] || { connect >/dev/null 2>&1; s=$(serial); }
   [ -n "$s" ] || { echo "phone-adb: not connected (run: phone-adb connect)" >&2; return 1; }
   adb -s "$s" shell "$@" | tr -d '\r'
 }

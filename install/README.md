@@ -188,8 +188,11 @@ sudo ./20-phone-keyboard.sh --user=alice --keyboard=<id>
 sudo ./20-phone-keyboard.sh --user=alice --remove      # undo
 ```
 
-**Security:** pairing gives the VM (that account, and root) an Android shell on
-the phone: shared storage, screenshots, input injection, app installs. Revoke it
+**Security:** pairing gives that account (and root) an Android shell on the
+phone: shared storage, screenshots, input injection, app installs. `phone-adb`
+uses a private adb server socket in the account's runtime directory, so other
+accounts on the VM cannot use the pairing (the default adb server on
+localhost:5037 would let any of them). Revoke it
 on the phone under Developer options > Wireless debugging > Paired devices.
 
 What still needs a human, once per fresh VM (including after a Terminal app

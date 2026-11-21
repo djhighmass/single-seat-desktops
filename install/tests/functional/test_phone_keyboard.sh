@@ -24,7 +24,7 @@ cat > "$BIN/adb" <<'EOF'
 # stub adb: state in $STUB
 S=$STUB
 case "$1" in
-  devices) echo "List of devices attached"; [ -f "$S/connected" ] && printf '%s\tdevice\n' "$(cat "$S/connected")"; exit 0 ;;
+  devices) echo "${ADB_SERVER_SOCKET:-none}" >> "$S/server-env"; echo "List of devices attached"; [ -f "$S/connected" ] && printf '%s\tdevice\n' "$(cat "$S/connected")"; exit 0 ;;
   connect) echo "$2" >> "$S/connect-log"
            [ "${2##*:}" = "${STUB_OK_PORT:-}" ] && { echo "$2" > "$S/connected"; echo "connected to $2"; } || echo "failed to connect to $2"
            exit 0 ;;
@@ -58,6 +58,7 @@ printf '%s\n' "$GB" > "$STUB/enabled-now"   # the chosen keyboard is installed b
 
 export PATH="$BIN:$PATH" STUB HOME="$SCRATCH/home" XDG_STATE_HOME="$SCRATCH/state" XDG_CONFIG_HOME="$SCRATCH/config"
 mkdir -p "$HOME"
+export XDG_RUNTIME_DIR="$SCRATCH/run"; mkdir -p "$XDG_RUNTIME_DIR"
 export PHONE_ADB_PORTS="40001 40002"
 export STUB_OK_PORT=40002
 
@@ -66,6 +67,17 @@ out="$(bash "$PA" connect 2>&1)"
 assert_contains "connect reports the working port" "$out" "connected: 10.9.9.1:40002"
 assert_contains "the first (wrong) port was tried too" "$(cat "$STUB/connect-log")" "10.9.9.1:40001"
 assert_eq "the working port is remembered" "$(cat "$XDG_STATE_HOME/phone-adb/port")" "40002"
+
+# --- P.1b: a private adb server socket is used, not the shared localhost:5037 one ---
+assert_contains "adb is pointed at a private unix socket in the runtime dir" "$(cat "$STUB/server-env")" "local:$XDG_RUNTIME_DIR/phone-adb.sock"
+assert_not_contains "the shared default server is never used" "$(cat "$STUB/server-env")" "none"
+out="$(env -u XDG_RUNTIME_DIR XDG_RUNTIME_DIR=/nonexistent-dir bash "$PA" status 2>&1)"; rc=$?
+assert_eq "no runtime dir is refused (not silently falling back to the shared server)" "$rc" "1"
+
+# --- P.1c: sh connects by itself when not connected ---
+rm -f "$STUB/connected"
+out="$(bash "$PA" sh settings get secure default_input_method 2>&1)"
+assert_eq "sh connects automatically and runs the command" "$out" "$GB"
 
 # --- P.2: connect fails clearly when nothing authenticates ---
 rm -f "$STUB/connected"
@@ -134,6 +146,8 @@ unit="$(render_unit)"
 assert_contains "service re-arms the watcher" "$unit" "ExecStart=/usr/local/bin/phone-adb kbd-follow"
 assert_contains "service retries while the phone is unreachable" "$unit" "Restart=on-failure"
 assert_failure "installer refuses to run without --user and without sudo user" bash -c "SUDO_USER= bash '$INSTALLER'"
+assert_contains "installer names the bad keyboard in its error (no blank name)" "$(grep -n 'not one of the installed keyboards' "$INSTALLER")" 'chosen'
+assert_contains "installer stops the shared default adb server" "$(cat "$INSTALLER")" "adb kill-server"
 assert_failure "a keyboard that is not installed is refused" bash "$PA" kbd-follow "com.example.missing/.X"
 assert_contains "installer asks for the adb package, not android-tools-adb" "$(cat "$INSTALLER")" "pkg_ensure adb python3"
 assert_contains "service has a start limit" "$unit" "StartLimitBurst="
