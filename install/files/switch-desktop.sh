@@ -140,6 +140,16 @@ echo "connector state stable=${stable_secs}s waited=${waited}s: $(connector_snap
 TARGET_TZ="$(sudo -n -u "$TARGET_USER" cat "${TARGET_HOME}/.config/timezone" 2>/dev/null || echo UTC)"
 echo "using timezone ${TARGET_TZ} for ${TARGET_USER} (from ${TARGET_HOME}/.config/timezone, defaults to UTC)"
 
+# wayfire -R (--damage-rerender) repaints the whole output every frame instead
+# of only the damaged regions. On this stack (pixman renderer, legacy DRM
+# modesetting on crosvm's virtio-gpu) partial repaints show stale content: with
+# a shell or `cat` the word being typed is erased and retyped on screen while
+# the text itself is correct, and the same typing under weston is clean. A
+# program that redraws a large area on every key (a full-screen TUI) hides it.
+# Cost measured on a Pixel 9 Pro XL VM: about 0.15 of one core idle. Override
+# with WAYFIRE_ARGS (empty to run plain wayfire) if you do not see the problem.
+WAYFIRE_ARGS="${WAYFIRE_ARGS--R}"
+
 echo "starting wayfire as ${TARGET_USER} (uid ${TARGET_UID}) directly on DRM, as systemd unit ${UNIT}"
 sudo -n systemctl reset-failed "$UNIT" 2>/dev/null
 # wayfire's own stdout/stderr are fully-buffered when not attached to a
@@ -165,7 +175,7 @@ sudo -n systemd-run \
   --setenv=WLR_NO_HARDWARE_CURSORS=1 \
   --setenv=WLR_DRM_NO_ATOMIC=1 \
   --setenv=TZ="$TARGET_TZ" \
-  -- stdbuf -oL -eL bash -lc "cd '${TARGET_HOME}'; unset DISPLAY WAYLAND_DISPLAY; exec stdbuf -oL -eL wayfire"
+  -- stdbuf -oL -eL bash -lc "cd '${TARGET_HOME}'; unset DISPLAY WAYLAND_DISPLAY; exec stdbuf -oL -eL wayfire ${WAYFIRE_ARGS}"
 echo "launched as ${UNIT} -- wayfire's own log is ${WAYFIRE_LOG} (or: journalctl -u ${UNIT})"
 
 rollback() {

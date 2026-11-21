@@ -166,6 +166,20 @@ they'll need to run `wayfire-customize.sh` again afterwards (it'll offer
 their previous answers as defaults) to reapply their personal extras on
 top of the fresh base.
 
+### Typed text looks erased and retyped (wayfire full repaint)
+
+On a Pixel 9 Pro XL, with Wayfire's software renderer on crosvm's virtio-gpu, typing
+in a shell or `cat` made the word being typed flicker: erased and retyped on screen
+while the text itself arrived correctly (a raw capture of the keyboard device and
+the file written were clean). Plain weston did not do it, voice typing or another
+keyboard app did not change it, and a full-screen program that repaints a lot on
+every key (Claude Code) hid it. Starting Wayfire with `-R` (full-output repaint)
+cured it in foot and lxterminal. `switch-desktop.sh` now passes `-R` by default
+(about 0.15 of one core idle there); set `WAYFIRE_ARGS=` (empty) in the environment
+of `switch-desktop.sh` to run plain wayfire. It looks like a damage / buffer-age
+problem with partial repaints; it was seen on one phone, so tell us if it is not
+needed on yours.
+
 ## Why some of this looks the way it does
 
 A few non-obvious things this installer bakes in, each the product of

@@ -75,6 +75,9 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   `wf-shell.ini` never ends up with a duplicated or stale managed block.
   Also checks the Synaptic launcher is wired through `pkexec-wayland`,
   not the raw `synaptic-pkexec` that silently drops the Wayland session.
+- **functional/test_wayfire_full_repaint.sh** -- checks `switch-desktop.sh` starts
+  wayfire with `-R` by default and that an empty `WAYFIRE_ARGS` turns it off (text
+  and syntax only; the real launch is the disruptive test).
 - **functional/test_backup_restore.sh** -- runs the real
   `backup-user.sh`/`restore-user.sh` against scratch `$HOME` directories
   (no sudo needed, neither script touches anything outside `$HOME`).
