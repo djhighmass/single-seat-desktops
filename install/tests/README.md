@@ -75,6 +75,11 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   `wf-shell.ini` never ends up with a duplicated or stale managed block.
   Also checks the Synaptic launcher is wired through `pkexec-wayland`,
   not the raw `synaptic-pkexec` that silently drops the Wayland session.
+- **functional/test_phone_keyboard.sh** -- runs the real `files/phone-adb`
+  against a stub `adb`/`ip` (no phone, no sudo): port scan fallbacks, nothing
+  chosen means nothing starts (opt-in), the phone-side watcher names the right
+  keyboards, your own keyboard is remembered and never guessed when ambiguous,
+  release restores it, plus the installer's keyboard picker and the systemd unit.
 - **functional/test_backup_restore.sh** -- runs the real
   `backup-user.sh`/`restore-user.sh` against scratch `$HOME` directories
   (no sudo needed, neither script touches anything outside `$HOME`).

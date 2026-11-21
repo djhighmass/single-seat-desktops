@@ -166,6 +166,54 @@ they'll need to run `wayfire-customize.sh` again afterwards (it'll offer
 their previous answers as defaults) to reapply their personal extras on
 top of the fresh base.
 
+### Optional: choose the Android keyboard while the Terminal is open
+
+Skip this unless you have the problem. On some phones a hardware keyboard
+loses characters in the Terminal: on a Pixel 9 Pro XL with Gboard as the active
+keyboard, every `.` and the space after it. The keys reach Android but its
+keyboard app re-processes them before the Terminal sees them, so nothing inside
+the VM can fix it. A different keyboard app may not do this: with Gboard current,
+dots were lost; with Simple Keyboard current, a short real-keyboard test typing
+dots and spaces passed. This was seen on one phone, so treat it as a thing to
+try, not a guarantee.
+
+`20-phone-keyboard.sh` lets the VM choose, over Wireless debugging, which
+keyboard Android uses while the Terminal app is focused, and put your usual
+one back the moment it is not. It disables and uninstalls nothing. You choose
+the keyboard; it lists what is installed on the phone.
+
+```sh
+sudo ./20-phone-keyboard.sh --user=alice               # installs, then asks which keyboard
+sudo ./20-phone-keyboard.sh --user=alice --keyboard=<id>
+sudo ./20-phone-keyboard.sh --user=alice --remove      # undo
+```
+
+**Security:** pairing gives the VM (that account, and root) an Android shell on
+the phone: shared storage, screenshots, input injection, app installs. Revoke it
+on the phone under Developer options > Wireless debugging > Paired devices.
+
+What still needs a human, once per fresh VM (including after a Terminal app
+upgrade): install the keyboard app you want on the phone, turn on Settings >
+Developer options > Wireless debugging (Wi-Fi must be on), tap "Pair device
+with pairing code", and run `phone-adb pair <wifi-ip:port> <code>` as that
+account. The script tells you this when it finds the VM unpaired.
+
+How it works: the phone is the VM's default gateway, so `phone-adb` connects to
+the gateway on the Wireless debugging port (found by scanning; it changes when
+Wireless debugging is toggled) and starts a small watcher script on the phone
+itself, because the VM stops when the Terminal closes and something must still
+put your keyboard back. The watcher dies if `adbd` restarts or the phone
+reboots; a systemd user service re-arms it when the account's user manager
+starts (`--no-autostart` skips that). While the Terminal is focused on any
+display, the phone's on-screen keyboard is the one you chose. The watcher polls
+every 3 seconds, so for up to 3 seconds after switching to the Terminal the old
+keyboard is still active.
+
+After a **phone reboot**, Wireless debugging is probably off, so nothing can
+re-arm the watcher until you turn it back on (Developer options > Wireless
+debugging); in the meantime the Terminal silently gets your usual keyboard
+again. This is not yet tested on a real phone reboot.
+
 ## Why some of this looks the way it does
 
 A few non-obvious things this installer bakes in, each the product of
@@ -305,6 +353,8 @@ install/
     pkexec-wayland                deployed to /usr/local/bin -- generic
                                    wrapper for launching a root GUI app
                                    without losing the Wayland session
+    phone-adb                     deployed to /usr/local/bin by
+                                   20-phone-keyboard.sh (optional)
     pkexec-wayland-helper         deployed to /usr/local/bin -- root side
                                    of pkexec-wayland, re-exports the
                                    caller's Wayland env before exec'ing

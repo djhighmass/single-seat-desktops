@@ -1,0 +1,145 @@
+#!/bin/bash
+# phone-adb -- control the Android phone this VM runs on, over Wireless
+# debugging, so the VM can choose which on-screen keyboard Android uses while
+# the Terminal app is in front. Optional; installed by 20-phone-keyboard.sh.
+#
+#   phone-adb pair <wifi-ip:pair-port> <code>   once: pair this VM (a human reads the
+#                                               code from Developer options >
+#                                               Wireless debugging > Pair device)
+#   phone-adb connect                           find the debug port and connect
+#   phone-adb status                            connection + current keyboard
+#   phone-adb keyboards                         keyboards installed on the phone
+#   phone-adb sh <command...>                   run a command on the phone
+#   phone-adb kbd-follow [ime]                  start the phone-side watcher: [ime]
+#                                               (default: the one saved in
+#                                               ~/.config/phone-adb/keyboard) is the
+#                                               keyboard while the Terminal app is
+#                                               focused; your own keyboard (the one
+#                                               current when this was started)
+#                                               otherwise. Nothing is disabled.
+#   phone-adb kbd-release                       stop the watcher, put your keyboard back
+#
+# The phone is this VM's default gateway, so no Wi-Fi address is needed to
+# connect. The debug port changes when Wireless debugging is toggled or the
+# phone reboots, so it is found by scanning the gateway.
+#
+# The watcher runs ON THE PHONE (a detached adb shell script), not in the VM:
+# the VM stops when the Terminal closes, and something has to put your keyboard
+# back then. It is killed if adbd restarts or the phone reboots; kbd-follow
+# re-arms it.
+#
+# SECURITY: pairing gives this VM (the account that paired, and root) an Android
+# shell on the phone: it can read shared storage, take screenshots, inject input
+# and install apps. Only pair a VM you trust, and revoke it on the phone under
+# Developer options > Wireless debugging > Paired devices.
+#
+# Test hooks: PHONE_ADB_GATEWAY (default: the VM's default gateway) and
+# PHONE_ADB_PORTS (space-separated; skips the scan).
+set -uo pipefail
+
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/phone-adb
+CONF=${XDG_CONFIG_HOME:-$HOME/.config}/phone-adb/keyboard
+TERMINAL_PKG=com.android.virtualization.terminal
+mkdir -p "$STATE"
+
+die() { echo "phone-adb: $*" >&2; exit 1; }
+
+GW=${PHONE_ADB_GATEWAY:-$(ip route 2>/dev/null | awk '/^default/{print $3; exit}')}
+[ -n "$GW" ] || die "no default gateway (is this the Terminal VM?)"
+
+serial() { adb devices | awk -v g="$GW:" 'index($1,g)==1 && $2=="device"{print $1; exit}'; }
+psh() {
+  local s; s=$(serial)
+  [ -n "$s" ] || { echo "phone-adb: not connected (run: phone-adb connect)" >&2; return 1; }
+  adb -s "$s" shell "$@" | tr -d '\r'
+}
+
+scan() {
+  [ -n "${PHONE_ADB_PORTS:-}" ] && { echo "$PHONE_ADB_PORTS"; return; }
+  python3 - "$GW" <<'PY'
+import socket, sys
+from concurrent.futures import ThreadPoolExecutor
+ip = sys.argv[1]
+def probe(p):
+    s = socket.socket(); s.settimeout(0.4)
+    try: s.connect((ip, p)); return p
+    except Exception: return None
+    finally: s.close()
+with ThreadPoolExecutor(400) as ex:
+    print(*[p for p in ex.map(probe, range(30000, 65000)) if p])
+PY
+}
+
+connect() {
+  [ -n "$(serial)" ] && { echo "already connected: $(serial)"; return 0; }
+  local p last
+  last=$(cat "$STATE/port" 2>/dev/null || true)
+  for p in $last $(scan); do
+    adb connect "$GW:$p" >/dev/null 2>&1
+    if [ -n "$(serial)" ]; then echo "$p" > "$STATE/port"; echo "connected: $GW:$p"; return 0; fi
+    adb disconnect "$GW:$p" >/dev/null 2>&1
+  done
+  echo "phone-adb: could not connect. Is Wireless debugging on, and has this VM been paired (phone-adb pair)?" >&2
+  return 1
+}
+
+cur_ime() { psh settings get secure default_input_method; }
+keyboards() { psh ime list -a -s; }
+
+case "${1:-status}" in
+  pair) shift; [ $# -eq 2 ] || die "usage: phone-adb pair <wifi-ip:pair-port> <code>"; adb pair "$@" ;;
+  connect) connect ;;
+  status) connect >/dev/null 2>&1; echo "serial: $(serial)"; echo "keyboard: $(cur_ime)" ;;
+  keyboards) connect >/dev/null || exit 1; keyboards ;;
+  sh) shift; psh "$@" ;;
+  kbd-follow)
+    connect >/dev/null || exit 1
+    target=${2:-$(cat "$CONF" 2>/dev/null || true)}
+    [ -n "$target" ] || die "no keyboard chosen: pass one (see: phone-adb keyboards) or save it in $CONF"
+    keyboards | grep -qxF "$target" || die "$target is not installed on the phone (see: phone-adb keyboards)"
+    # Installed is not the same as enabled: a keyboard fresh from the store must be
+    # enabled before it can be made current, or the watcher's `ime set` fails silently.
+    enabled() { psh ime list -s | grep -qxF "$1"; }
+    enabled "$target" || { psh ime enable "$target" >/dev/null 2>&1; enabled "$target" || die "could not enable $target"; }
+    cur=$(cur_ime)
+    # "Your keyboard" = what is current now, unless that is already the terminal
+    # keyboard (a stale run): then the one saved last time.
+    if [ "$cur" != "$target" ]; then home=$cur; echo "$home" > "$STATE/home-ime"
+    else
+      home=$(cat "$STATE/home-ime" 2>/dev/null || true)
+      if [ -z "$home" ]; then
+        # Nothing saved: if exactly one OTHER enabled keyboard is a real typing
+        # keyboard (not voice typing), that is yours. Otherwise do not guess.
+        others=$(psh ime list -s | grep -vxF "$target" | grep -v VoiceInputMethodService)
+        [ "$(grep -c . <<<"$others")" -eq 1 ] && home=$others
+      fi
+    fi
+    [ -n "$home" ] && [ "$home" != null ] || die "cannot tell which keyboard is yours (current is the terminal keyboard); run: phone-adb sh ime set <yours>, then retry"
+    echo "$home" > "$STATE/home-ime"
+    psh ime enable "$home" >/dev/null 2>&1
+    psh "pkill -f '[k]bd-watch.sh'; true"
+    sleep 1   # let the old watcher exit so it cannot be mistaken for the new one
+    s=$(serial)
+    adb -s "$s" shell "cat > /data/local/tmp/kbd-watch.sh" <<EOS
+#!/system/bin/sh
+# kbd-watch: "$target" while the Terminal app is focused, "$home" otherwise
+while :; do
+  if dumpsys window | grep mFocusedApp | grep -q $TERMINAL_PKG; then want=$target; else want=$home; fi
+  [ "\$(settings get secure default_input_method)" = "\$want" ] || ime set "\$want" >/dev/null 2>&1
+  sleep 3
+done
+EOS
+    adb -s "$s" shell "nohup sh /data/local/tmp/kbd-watch.sh >/dev/null 2>&1 </dev/null &"
+    sleep 1
+    pid=$(psh "pgrep -f '[k]bd-watch.sh'" | tail -1)
+    [ -n "$pid" ] || die "the watcher did not start"
+    echo "watcher running on the phone (pid $pid): $target in the Terminal, $home elsewhere" ;;
+  kbd-release)
+    connect >/dev/null || exit 1
+    psh "pkill -f '[k]bd-watch.sh'; true"
+    home=$(cat "$STATE/home-ime" 2>/dev/null || true)
+    if [ -n "$home" ] && [ "$home" != null ]; then
+      psh ime set "$home" >/dev/null && echo "restored $home"
+    fi ;;
+  *) sed -n 2,26p "$0"; exit 2 ;;
+esac
