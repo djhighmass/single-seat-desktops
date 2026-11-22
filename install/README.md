@@ -131,6 +131,35 @@ someone else, just run another `*-wayfire` alias from the host's terminal.
 To go back to the plain shared weston desktop, restart it yourself as the
 host: `systemctl --user start weston.socket weston.service`.
 
+### After a Terminal app upgrade or reset
+
+An update of Android's Terminal app can leave you with a fresh VM: it shows
+"The Linux terminal that you were using is out of date. Please upgrade to
+proceed" and the old system is kept read-only at `/mnt/backup`. The app's own
+"Restore" option brings back packages but can stall, and it does not recreate
+your extra accounts. Rebuilding from this repo plus the backup, in order:
+
+```sh
+# 1. accounts (adduser asks for a password; add --sudo-level=3 for passwordless)
+sudo ./00-create-users.sh alice bob
+
+# 2. look first, then copy each home back from /mnt/backup
+sudo ./05-restore-homes.sh --dry-run
+sudo ./05-restore-homes.sh
+
+# 3. the desktops
+sudo ./10-install-wayfire-desktops.sh --host=droid --users=alice,bob
+```
+
+`05-restore-homes.sh` only reads the backup and is a plain copy of each home,
+owned by its account. To leave something out, add `--exclude=PATTERN` (an
+rsync exclude pattern; repeatable), e.g. `--exclude=.ssh`. A file that already
+exists and differs (in size or modification time) is kept as
+`<name>.pre-restore-<time>`. An account that does not exist yet, or has no
+home directory, is listed and skipped (nothing is created) and the script
+exits non-zero, so run it again once that is fixed. Re-install anything the backup restores only as
+data (for example your editor or CLI tools) with `apt` afterwards.
+
 ## Re-running / idempotency
 
 Safe to re-run any time. What happens on a second run differs by step:

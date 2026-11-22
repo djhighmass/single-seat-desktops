@@ -1,0 +1,87 @@
+#!/bin/bash
+# 05-restore-homes.sh -- copies home directories back from the Terminal app's
+# own backup (mounted at /mnt/backup) after an app upgrade or reset gave you a
+# fresh VM.
+#
+#   sudo ./05-restore-homes.sh --dry-run            show what would be copied
+#   sudo ./05-restore-homes.sh                      restore every account that exists
+#   sudo ./05-restore-homes.sh --users=alice,bob    only these accounts
+#   sudo ./05-restore-homes.sh --exclude=.ssh       leave something out (repeatable;
+#                                                   an rsync exclude pattern)
+#   sudo ./05-restore-homes.sh --backup=/some/dir   a different backup root
+#
+# Order on a fresh VM: ./00-create-users.sh (accounts must already exist),
+# then this, then ./10-install-wayfire-desktops.sh (which migrates restored
+# config forward). An account that does not exist yet, or has no home
+# directory, is listed and skipped (nothing is created here) and the script
+# exits non-zero, so run it again once that is fixed.
+#
+# It is a plain copy of each home, owned by its account. A file that already
+# exists and differs (in size or modification time) is kept next to the
+# restored one as <name>.pre-restore-<time>. The backup is only ever read.
+
+set -euo pipefail
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"  # before the cd: $0 may be relative
+cd "$(dirname "$SELF")"
+# shellcheck source=lib/common.sh
+source lib/common.sh
+
+# restore_one_home <src-home> <dst-home> [rsync args...]
+# Returns 1 (after saying why) if rsync could not copy everything.
+restore_one_home() {
+  local src="$1" dst="$2"; shift 2
+  rsync -a --backup "--suffix=.pre-restore-${RESTORE_STAMP:-$(date +%Y%m%d-%H%M%S)}" "$@" "$src"/ "$dst"/ || { warn "$src: rsync exited $? -- not everything was copied"; return 1; }
+}
+
+main() {
+  local backup=/mnt/backup users="" dry=n a rsync_args=()
+  for a in "$@"; do
+    case "$a" in
+      --backup=*) backup="${a#--backup=}" ;;
+      --users=*) users="${a#--users=}" ;;
+      --exclude=*) rsync_args+=("$a") ;;
+      --dry-run) dry=y; rsync_args+=(-n -i) ;;
+      -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$SELF"; exit 0 ;;
+      *) die "unknown option: $a (see --help)" ;;
+    esac
+  done
+  [ "$dry" = y ] || require_root
+  RESTORE_STAMP="$(date +%Y%m%d-%H%M%S)"  # one suffix for the whole run
+  [ -d "$backup/home" ] || die "no $backup/home -- is the Terminal backup mounted? (looked for $backup/home)"
+  if ! command -v rsync >/dev/null; then
+    [ "$dry" = y ] && die "rsync is required"
+    pkg_ensure rsync
+  fi
+
+  local want=() u d missing=() failed=() done_n=0 dst
+  if [ -n "$users" ]; then IFS=, read -r -a want <<<"$users"
+  else
+    for d in "$backup"/home/*/; do [ -d "$d" ] && want+=("$(basename "$d")"); done
+  fi
+  [ "${#want[@]}" -gt 0 ] || die "nothing to restore under $backup/home"
+  # Check every name before copying anything, so a typo cannot leave a
+  # half-finished restore behind.
+  for u in "${want[@]}"; do
+    [ -d "$backup/home/$u" ] || die "no $backup/home/$u in the backup"
+  done
+
+  for u in "${want[@]}"; do
+    if ! getent passwd "$u" >/dev/null; then missing+=("$u"); continue; fi
+    dst="$(user_home "$u")"
+    [ -d "$dst" ] || { missing+=("$u (no home directory at $dst)"); continue; }
+    log "$u: $backup/home/$u -> $dst"
+    if restore_one_home "$backup/home/$u" "$dst" "--chown=$u:$(id -gn "$u")" "${rsync_args[@]}"; then
+      done_n=$((done_n + 1))
+    else
+      failed+=("$u")
+    fi
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    warn "skipped, not ready: ${missing[*]} -- create the account (sudo ./00-create-users.sh <name>) or its home first, then run this again"
+  fi
+  log "done: $done_n home(s) processed$([ "$dry" = y ] && echo " (nothing changed: dry run)")"
+  [ "${#missing[@]}" -eq 0 ] && [ "${#failed[@]}" -eq 0 ] ||
+    die "incomplete: ${#missing[@]} account(s) skipped, ${#failed[@]} failed -- see above"
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi
