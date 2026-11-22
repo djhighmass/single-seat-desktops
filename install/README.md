@@ -155,8 +155,9 @@ sudo ./10-install-wayfire-desktops.sh --host=droid --users=alice,bob
 owned by its account. To leave something out, add `--exclude=PATTERN` (an
 rsync exclude pattern; repeatable), e.g. `--exclude=.ssh`. A file that already
 exists and differs (in size or modification time) is kept as
-`<name>.pre-restore-<time>`. Accounts that are in the backup but do not exist
-yet are listed, not created. Re-install anything the backup restores only as
+`<name>.pre-restore-<time>`. An account that does not exist yet, or has no
+home directory, is listed and skipped (nothing is created) and the script
+exits non-zero, so run it again once that is fixed. Re-install anything the backup restores only as
 data (for example your editor or CLI tools) with `apt` afterwards.
 
 ## Re-running / idempotency

@@ -12,8 +12,9 @@
 #
 # Order on a fresh VM: ./00-create-users.sh (accounts must already exist),
 # then this, then ./10-install-wayfire-desktops.sh (which migrates restored
-# config forward). Accounts that are in the backup but do not exist yet are
-# listed and skipped; nothing is created here.
+# config forward). An account that does not exist yet, or has no home
+# directory, is listed and skipped (nothing is created here) and the script
+# exits non-zero, so run it again once that is fixed.
 #
 # It is a plain copy of each home, owned by its account. A file that already
 # exists and differs (in size or modification time) is kept next to the
@@ -67,7 +68,7 @@ main() {
   for u in "${want[@]}"; do
     if ! getent passwd "$u" >/dev/null; then missing+=("$u"); continue; fi
     dst="$(user_home "$u")"
-    [ -d "$dst" ] || die "destination home does not exist: $dst"
+    [ -d "$dst" ] || { missing+=("$u (no home directory at $dst)"); continue; }
     log "$u: $backup/home/$u -> $dst"
     if restore_one_home "$backup/home/$u" "$dst" "--chown=$u:$(id -gn "$u")" "${rsync_args[@]}"; then
       done_n=$((done_n + 1))
@@ -76,10 +77,11 @@ main() {
     fi
   done
   if [ "${#missing[@]}" -gt 0 ]; then
-    warn "no account yet for: ${missing[*]} -- create them first (sudo ./00-create-users.sh ${missing[*]}), then run this again"
+    warn "skipped, not ready: ${missing[*]} -- create the account (sudo ./00-create-users.sh <name>) or its home first, then run this again"
   fi
   log "done: $done_n home(s) processed$([ "$dry" = y ] && echo " (nothing changed: dry run)")"
-  [ "${#failed[@]}" -eq 0 ] || die "incomplete restore for: ${failed[*]} (see the rsync messages above)"
+  [ "${#missing[@]}" -eq 0 ] && [ "${#failed[@]}" -eq 0 ] ||
+    die "incomplete: ${#missing[@]} account(s) skipped, ${#failed[@]} failed -- see above"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi

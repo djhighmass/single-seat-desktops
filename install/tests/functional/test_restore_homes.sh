@@ -77,8 +77,20 @@ assert_failure "a user not in the backup is refused" bash "$SCRIPT" --dry-run --
 out="$(bash "$SCRIPT" --dry-run --backup="$BK" --users="$FIXTURE,nobody-here" 2>&1)"; rc=$?
 assert_eq "a typo in --users is refused" "$([ "$rc" -ne 0 ] && echo refused)" "refused"
 assert_not_contains "...before the first home is processed" "$out" " -> "
-out="$(bash "$SCRIPT" --dry-run --backup="$BK" --users="$FIXTURE" 2>&1)"
-assert_contains "an account missing on this system is reported, not created" "$out" "no account yet for: $FIXTURE"
-assert_contains "dry-run CLI says nothing changed" "$out" "nothing changed"
+out="$(bash "$SCRIPT" --dry-run --backup="$BK" --users="$FIXTURE" 2>&1)"; rc=$?
+assert_contains "an account missing on this system is reported, not created" "$out" "skipped, not ready: $FIXTURE"
+assert_eq "a skipped account makes the run exit non-zero" "$([ "$rc" -ne 0 ] && echo failed)" "failed"
+assert_contains "the run still says nothing changed" "$out" "nothing changed"
+
+# An account that exists but has no home directory is skipped the same way.
+# "nobody" is a standard account whose home (/nonexistent) does not exist.
+nohome="$(getent passwd nobody | cut -d: -f6)"
+if [ -n "$nohome" ] && [ ! -e "$nohome" ]; then
+  mkdir -p "$BK/home/nobody"; echo x > "$BK/home/nobody/f"
+  out="$(bash "$SCRIPT" --dry-run --backup="$BK" --users=nobody 2>&1)"; rc=$?
+  assert_contains "an account with no home directory is reported" "$out" "no home directory at $nohome"
+  assert_eq "...and makes the run exit non-zero" "$([ "$rc" -ne 0 ] && echo failed)" "failed"
+  assert_file_absent "...and nothing was created for it" "$nohome"
+fi
 
 summarize_and_exit
