@@ -75,6 +75,11 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   `wf-shell.ini` never ends up with a duplicated or stale managed block.
   Also checks the Synaptic launcher is wired through `pkexec-wayland`,
   not the raw `synaptic-pkexec` that silently drops the Wayland session.
+- **functional/test_restore_homes.sh** -- runs `05-restore-homes.sh`'s real
+  copy logic against scratch directories (no sudo): everything copied,
+  `--exclude` honoured, differing files kept as
+  `.pre-restore-<time>`, dry run writes nothing, the backup is never
+  modified, and the CLI refuses a missing backup or unknown option.
 - **functional/test_backup_restore.sh** -- runs the real
   `backup-user.sh`/`restore-user.sh` against scratch `$HOME` directories
   (no sudo needed, neither script touches anything outside `$HOME`).

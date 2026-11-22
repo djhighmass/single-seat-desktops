@@ -20,7 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends \
       wayfire wf-shell foot seatd grim jq curl yad synaptic lxpolkit \
       polkitd pkexec wlr-randr inotify-tools \
-      sudo adduser git ca-certificates procps psmisc util-linux \
+      sudo adduser git ca-certificates procps psmisc util-linux rsync \
       dbus dbus-bin dbus-daemon xkb-data \
       adwaita-icon-theme fonts-dejavu-core fonts-noto-color-emoji \
       less nano python3 librsvg2-common \
