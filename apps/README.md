@@ -34,3 +34,4 @@ tests. The ones that need sudo skip themselves cleanly without it.
 
 | App | Source | Our defaults |
 |---|---|---|
+| `lxterminal` | Debian package `lxterminal` | scrollback of at least 10000 lines (LXTerminal's own default is 1000) |
