@@ -82,10 +82,14 @@ PERL
 }
 
 # Core wayfire.ini settings that a file from an older installer lacks:
-# foreign-toplevel (the panel's window list) and the panel supervisor in
-# place of wayfire's one-shot autostart_wf_shell.
+# foreign-toplevel (the panel's window list), the panel supervisor in place
+# of wayfire's one-shot autostart_wf_shell, and title bars drawn by wayfire's
+# decoration plugin (minimize, maximize, close, resize borders -- otherwise
+# GTK3 apps draw their own, with only a close button). An explicit
+# preferred_decoration_mode is kept.
 CORE_PLUGIN_ADD=foreign-toplevel
 CORE_SHELL_CMD=/usr/local/bin/wf-shell-supervisor.sh
+CORE_DECORATION_MODE=server
 
 ensure_core_wayfire_ini() {
   # ensure_core_wayfire_ini <user> <path> -- adds the settings above to an
@@ -94,7 +98,7 @@ ensure_core_wayfire_ini() {
   local u="$1" ini="$2" tmp
   [ -f "$ini" ] || return 0
   tmp="$(mktemp)"
-  awk -v plugin="$CORE_PLUGIN_ADD" -v shell_cmd="$CORE_SHELL_CMD" '
+  awk -v plugin="$CORE_PLUGIN_ADD" -v shell_cmd="$CORE_SHELL_CMD" -v deco="$CORE_DECORATION_MODE" '
     function emit_autostart() {
       print "autostart_wf_shell = false"
       print "shell = " shell_cmd
@@ -102,6 +106,14 @@ ensure_core_wayfire_ini() {
     # Matching is on the line as wayfire reads it: comment and surrounding
     # whitespace stripped. Lines are printed as written.
     function bare(s) { sub(/[ \t]*#.*/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    # First pass (the file is given twice): is the decoration mode set
+    # anywhere in [core]? That is only known once the whole file is read.
+    NR == FNR {
+      l = bare($0)
+      if (l ~ /^\[.*\]$/) s = l
+      if (s == "[core]" && l ~ /^preferred_decoration_mode[ \t]*=/) has_deco = 1
+      next
+    }
     { line = bare($0) }
     line ~ /^\[.*\]$/ { section = line }
     section == "[core]" && line ~ /^plugins[ \t]*=/ {
@@ -114,9 +126,13 @@ ensure_core_wayfire_ini() {
     }
     section == "[autostart]" && line ~ /^(autostart_wf_shell|shell)[ \t]*=/ { next }
     { print }
+    line == "[core]" && !seen_core++ && !has_deco { print "preferred_decoration_mode = " deco }
     line == "[autostart]" && !seen_autostart { emit_autostart(); seen_autostart = 1 }
-    END { if (!seen_autostart) { print ""; print "[autostart]"; emit_autostart() } }
-  ' "$ini" > "$tmp"
+    END {
+      if (!seen_core) { print ""; print "[core]"; print "preferred_decoration_mode = " deco }
+      if (!seen_autostart) { print ""; print "[autostart]"; emit_autostart() }
+    }
+  ' "$ini" "$ini" > "$tmp"
   if cmp -s "$tmp" "$ini"; then
     rm -f "$tmp"
     return 0
@@ -124,36 +140,7 @@ ensure_core_wayfire_ini() {
   backup_file "$ini"
   write_owned_file "$u" "$ini" 644 < "$tmp"
   rm -f "$tmp"
-  log "$u: updated core wayfire.ini settings (panel supervision, window list) -- previous copy backed up"
-}
-
-# Title bars drawn by wayfire's decoration plugin (minimize, maximize, close,
-# resize borders). Without it, GTK3 apps draw their own title bar on wayfire,
-# with only a close button. An explicit preferred_decoration_mode is kept.
-ensure_server_decorations() {
-  # ensure_server_decorations <user> <path> -- backs up and rewrites only if
-  # something changes.
-  local u="$1" ini="$2" tmp
-  [ -f "$ini" ] || return 0
-  tmp="$(mktemp)"
-  awk '
-    function bare(s) { sub(/[ \t]*#.*/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
-    { line = bare($0); lines[NR] = $0
-      if (line ~ /^\[.*\]$/) { section = line; if (line == "[core]" && !core) core = NR }
-      if (section == "[core]" && line ~ /^preferred_decoration_mode[ \t]*=/) has = 1 }
-    END {
-      for (i = 1; i <= NR; i++) {
-        print lines[i]
-        if (i == core && !has) print "preferred_decoration_mode = server"
-      }
-      if (!core) { print ""; print "[core]"; print "preferred_decoration_mode = server" }
-    }' "$ini" > "$tmp"
-  if ! cmp -s "$tmp" "$ini"; then
-    backup_file "$ini"
-    write_owned_file "$u" "$ini" 644 < "$tmp"
-    log "$u: wayfire now draws window title bars (minimize, maximize, close)"
-  fi
-  rm -f "$tmp"
+  log "$u: updated core wayfire.ini settings (panel supervision, window list, title bars) -- previous copy backed up"
 }
 
 write_owned_file() {
