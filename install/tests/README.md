@@ -118,7 +118,9 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   get published (through a stub, never the real user's environment).
 - **functional/test_wayfire_ini_migration.sh** (needs sudo; creates and
   deletes a disposable account) -- an earlier installer's `wayfire.ini`
-  gains the newer core settings, keeps everything else (including a
+  gains the newer core settings (including wayfire-drawn title bars, in
+  a new `[core]` if there is none, and never overriding an explicit
+  `preferred_decoration_mode`), keeps everything else (including a
   `term1` line), stays user-owned, is backed up once, is untouched by a
   second run, and still loads under a real headless wayfire.
 - **functional/test_noninteractive_validation.sh** (needs sudo) -- a

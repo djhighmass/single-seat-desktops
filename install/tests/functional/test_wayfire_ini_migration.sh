@@ -43,7 +43,7 @@ sudo -n -u "$TESTUSER" mkdir -p "$H/.config"
 } | sudo -n -u "$TESTUSER" tee "$INI" >/dev/null
 before="$(sudo -n cat "$INI")"
 
-funcs="$(source "$INSTALL_DIR/lib/common.sh"; declare -f ensure_core_wayfire_ini backup_file write_owned_file log; declare -p CORE_PLUGIN_ADD CORE_SHELL_CMD)"
+funcs="$(source "$INSTALL_DIR/lib/common.sh"; declare -f ensure_core_wayfire_ini backup_file write_owned_file log; declare -p CORE_PLUGIN_ADD CORE_SHELL_CMD CORE_DECORATION_MODE)"
 migrate() { sudo -n bash -c "$funcs"$'\n'"ensure_core_wayfire_ini '$TESTUSER' '$INI'" >/dev/null 2>&1; }
 
 migrate
@@ -57,9 +57,11 @@ assert_contains "wayfire's own one-shot panel/background autostart is turned off
   "$after" "autostart_wf_shell = false"
 assert_contains "the supervisor is started instead" \
   "$after" "shell = /usr/local/bin/wf-shell-supervisor.sh"
+assert_contains "wayfire draws the title bars, right under [core]" \
+  "$after" $'[core]\npreferred_decoration_mode = server\nplugins'
 assert_contains "wayfire-customize.sh's term1 line survives" "$after" "$TERM1"
 assert_eq "nothing else in the file changed" \
-  "$(grep -vE '^(plugins|autostart_wf_shell|shell) =' <<< "$after")" \
+  "$(grep -vE '^(plugins|autostart_wf_shell|shell|preferred_decoration_mode) =' <<< "$after")" \
   "$(grep -vE '^plugins =' <<< "$before")"
 assert_eq "the user still owns their wayfire.ini" "$(sudo -n stat -c %U "$INI")" "$TESTUSER"
 assert_eq "the previous version was backed up, once" \
@@ -107,5 +109,32 @@ assert_eq "a commented [autostart] header is found, not duplicated" \
   "$(grep -c '^\[autostart\]' <<< "$hand")" "1"
 assert_not_contains "an indented old shell line is replaced" "$hand" "shell = wf-panel"
 assert_contains "the header's comment is kept" "$hand" "[autostart]   # my startup apps"
+
+# Title bars: an explicit choice is kept (and costs no backup); a file with
+# no [core] section gets one.
+bak_count() { sudo -n bash -c "ls '$1'.bak-* 2>/dev/null | wc -l" | tr -d ' '; }
+migrate_file() { sudo -n bash -c "$funcs"$'\n'"ensure_core_wayfire_ini '$TESTUSER' '$1'" >/dev/null 2>&1; }
+
+CSD="$H/.config/explicit-mode.ini"
+{
+  echo "[core]"
+  echo "  preferred_decoration_mode = client  # I like CSD"
+  echo "plugins = autostart foreign-toplevel"
+  echo
+  echo "[autostart]"
+  echo "autostart_wf_shell = false"
+  echo "shell = /usr/local/bin/wf-shell-supervisor.sh"
+} | sudo -n -u "$TESTUSER" tee "$CSD" >/dev/null
+csd_before="$(sudo -n cat "$CSD")"
+migrate_file "$CSD"
+assert_eq "an explicit preferred_decoration_mode is left as is" "$(sudo -n cat "$CSD")" "$csd_before"
+assert_eq "...and an unchanged file is not backed up" "$(bak_count "$CSD")" "0"
+
+NOCORE="$H/.config/no-core.ini"
+printf '[move]\nactivate = <alt> BTN_LEFT\n' | sudo -n -u "$TESTUSER" tee "$NOCORE" >/dev/null
+migrate_file "$NOCORE"
+assert_contains "a missing [core] section is added with the setting" "$(sudo -n cat "$NOCORE")" \
+  $'[core]\npreferred_decoration_mode = server'
+assert_eq "...the file stays user-owned" "$(sudo -n stat -c %U "$NOCORE")" "$TESTUSER"
 
 summarize_and_exit

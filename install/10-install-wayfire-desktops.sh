@@ -252,7 +252,7 @@ onboard_user() {
   [ "$FORCE_CUSTOMIZATIONS" = y ] || ensure_core_wayfire_ini "$u" "$home/.config/wayfire.ini"
 
   if [ -f "$home/.config/wayfire.ini" ] && [ "$FORCE_CUSTOMIZATIONS" != y ]; then
-    log "$u already has a wayfire.ini -- leaving their core desktop in place."
+    log "$u already has a wayfire.ini -- keeping it (only missing core settings were added)."
     log "(re-run with --force-new-user-customizations to reset $u's core desktop --"
     log " they'll need to re-run wayfire-customize.sh afterwards for their extras)"
     return
