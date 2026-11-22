@@ -166,6 +166,14 @@ they'll need to run `wayfire-customize.sh` again afterwards (it'll offer
 their previous answers as defaults) to reapply their personal extras on
 top of the fresh base.
 
+## Title bars
+
+wayfire draws every window's title bar (`preferred_decoration_mode =
+server`), with minimize, maximize and close buttons and borders to resize
+by. Otherwise GTK3 apps draw their own on wayfire, with only a close
+button. New users get it from the template; on a re-run it's added to an
+existing `wayfire.ini` unless that already sets `preferred_decoration_mode`.
+
 ## Why some of this looks the way it does
 
 A few non-obvious things this installer bakes in, each the product of

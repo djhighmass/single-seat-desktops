@@ -127,6 +127,35 @@ ensure_core_wayfire_ini() {
   log "$u: updated core wayfire.ini settings (panel supervision, window list) -- previous copy backed up"
 }
 
+# Title bars drawn by wayfire's decoration plugin (minimize, maximize, close,
+# resize borders). Without it, GTK3 apps draw their own title bar on wayfire,
+# with only a close button. An explicit preferred_decoration_mode is kept.
+ensure_server_decorations() {
+  # ensure_server_decorations <user> <path> -- backs up and rewrites only if
+  # something changes.
+  local u="$1" ini="$2" tmp
+  [ -f "$ini" ] || return 0
+  tmp="$(mktemp)"
+  awk '
+    function bare(s) { sub(/[ \t]*#.*/, "", s); gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    { line = bare($0); lines[NR] = $0
+      if (line ~ /^\[.*\]$/) { section = line; if (line == "[core]" && !core) core = NR }
+      if (section == "[core]" && line ~ /^preferred_decoration_mode[ \t]*=/) has = 1 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        print lines[i]
+        if (i == core && !has) print "preferred_decoration_mode = server"
+      }
+      if (!core) { print ""; print "[core]"; print "preferred_decoration_mode = server" }
+    }' "$ini" > "$tmp"
+  if ! cmp -s "$tmp" "$ini"; then
+    backup_file "$ini"
+    write_owned_file "$u" "$ini" 644 < "$tmp"
+    log "$u: wayfire now draws window title bars (minimize, maximize, close)"
+  fi
+  rm -f "$tmp"
+}
+
 write_owned_file() {
   # write_owned_file <user> <path> <mode> <<'EOF' ... EOF
   local u="$1" path="$2" mode="$3"

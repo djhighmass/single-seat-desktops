@@ -116,6 +116,10 @@ disruptive/               real switch-desktop.sh calls -- never auto-run
   gains the newer core settings, keeps everything else (including a
   `term1` line), stays user-owned, is backed up once, is untouched by a
   second run, and still loads under a real headless wayfire.
+- **functional/test_server_decorations.sh** (needs sudo; creates and
+  deletes a disposable account) -- `preferred_decoration_mode = server`
+  goes into `[core]` (or a new `[core]`), an explicit mode is kept, the
+  file stays user-owned, and a second run changes nothing.
 - **functional/test_noninteractive_validation.sh** (needs sudo) -- a
   misspelled timezone, an unknown or host account, a stray `--timezone`,
   or a bad `--sudo-level` each abort with a reason before any package
