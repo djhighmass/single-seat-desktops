@@ -36,3 +36,4 @@ tests. The ones that need sudo skip themselves cleanly without it.
 |---|---|---|
 | `lxterminal` | Debian package `lxterminal` | scrollback of at least 10000 lines (LXTerminal's own default is 1000) |
 | `claude-code` | Anthropic's apt repository, set up as their docs describe, with the key fingerprint checked | the classic renderer (`"tui": "default"`), so the terminal's own scrollback works |
+| `google-chrome` | Google's own `.deb` (amd64 or arm64), which sets up Google's apt repository and key itself | none |
