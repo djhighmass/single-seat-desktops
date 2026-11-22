@@ -25,38 +25,34 @@ cd "$(dirname "$SELF")"
 # shellcheck source=lib/common.sh
 source lib/common.sh
 
-# restore_one_home <src-home> <dst-home> <dry-run y|n> <owner|""> [rsync args...]
+# restore_one_home <src-home> <dst-home> [rsync args...]
 # Returns 1 (after saying why) if rsync could not copy everything.
 restore_one_home() {
-  local src="$1" dst="$2" dry="$3" owner="$4"; shift 4
-  [ -d "$dst" ] || die "destination home does not exist: $dst"
-  local args=(-a --backup "--suffix=.pre-restore-$(date +%Y%m%d-%H%M%S)" "$@")
-  [ "$dry" = y ] && args+=(-n -i)
-  [ -n "$owner" ] && args+=("--chown=$owner")
-  rsync "${args[@]}" "$src"/ "$dst"/ || { warn "$src: rsync exited $? -- not everything was copied"; return 1; }
+  local src="$1" dst="$2"; shift 2
+  rsync -a --backup "--suffix=.pre-restore-${RESTORE_STAMP:-$(date +%Y%m%d-%H%M%S)}" "$@" "$src"/ "$dst"/ || { warn "$src: rsync exited $? -- not everything was copied"; return 1; }
 }
 
 main() {
-  local backup=/mnt/backup users="" dry=n a excludes=()
+  local backup=/mnt/backup users="" dry=n a rsync_args=()
   for a in "$@"; do
     case "$a" in
       --backup=*) backup="${a#--backup=}" ;;
       --users=*) users="${a#--users=}" ;;
-      --exclude=*) excludes+=("$a") ;;
-      --dry-run) dry=y ;;
+      --exclude=*) rsync_args+=("$a") ;;
+      --dry-run) dry=y; rsync_args+=(-n -i) ;;
       -h|--help) sed -n '2,/^[^#]/{/^#/s/^# \{0,1\}//p}' "$SELF"; exit 0 ;;
       *) die "unknown option: $a (see --help)" ;;
     esac
   done
   [ "$dry" = y ] || require_root
+  RESTORE_STAMP="$(date +%Y%m%d-%H%M%S)"  # one suffix for the whole run
   [ -d "$backup/home" ] || die "no $backup/home -- is the Terminal backup mounted? (looked for $backup/home)"
   if ! command -v rsync >/dev/null; then
     [ "$dry" = y ] && die "rsync is required"
     pkg_ensure rsync
   fi
 
-  local want=() u d missing=() failed=() done_n=0 note="" owner dst
-  [ "$dry" = y ] && note=" (dry run)"
+  local want=() u d missing=() failed=() done_n=0 dst
   if [ -n "$users" ]; then IFS=, read -r -a want <<<"$users"
   else
     for d in "$backup"/home/*/; do [ -d "$d" ] && want+=("$(basename "$d")"); done
@@ -71,10 +67,9 @@ main() {
   for u in "${want[@]}"; do
     if ! getent passwd "$u" >/dev/null; then missing+=("$u"); continue; fi
     dst="$(user_home "$u")"
-    owner=""
-    [ "$dry" = y ] || owner="$u:$(id -gn "$u")"
-    log "$u: $backup/home/$u -> $dst$note"
-    if restore_one_home "$backup/home/$u" "$dst" "$dry" "$owner" "${excludes[@]}"; then
+    [ -d "$dst" ] || die "destination home does not exist: $dst"
+    log "$u: $backup/home/$u -> $dst"
+    if restore_one_home "$backup/home/$u" "$dst" "--chown=$u:$(id -gn "$u")" "${rsync_args[@]}"; then
       done_n=$((done_n + 1))
     else
       failed+=("$u")
@@ -83,7 +78,7 @@ main() {
   if [ "${#missing[@]}" -gt 0 ]; then
     warn "no account yet for: ${missing[*]} -- create them first (sudo ./00-create-users.sh ${missing[*]}), then run this again"
   fi
-  log "done: $done_n home(s) processed${note:+ (nothing changed: dry run)}"
+  log "done: $done_n home(s) processed$([ "$dry" = y ] && echo " (nothing changed: dry run)")"
   [ "${#failed[@]}" -eq 0 ] || die "incomplete restore for: ${failed[*]} (see the rsync messages above)"
 }
 

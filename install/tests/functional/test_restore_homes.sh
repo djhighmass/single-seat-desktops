@@ -32,7 +32,7 @@ set +e  # the sourced script turned on -e; this file tallies failures itself
 
 # --- R.1: a plain restore copies everything, dotfiles and keys included ---
 mk_backup_home; mkdir -p "$DST"
-restore_one_home "$BK/home/$FIXTURE" "$DST" n "" >/dev/null 2>&1
+restore_one_home "$BK/home/$FIXTURE" "$DST" >/dev/null 2>&1
 assert_file_exists "ordinary file restored" "$DST/docs/notes"
 assert_file_exists "dotfile restored" "$DST/.bashrc"
 assert_file_exists "ssh key restored" "$DST/.ssh/id_ed25519"
@@ -40,21 +40,21 @@ assert_file_exists "nested config restored" "$DST/.config/gh/hosts.yml"
 
 # --- R.2: extra arguments go to rsync, so a caller can leave things out ---
 rm -rf "$DST"; mkdir -p "$DST"
-restore_one_home "$BK/home/$FIXTURE" "$DST" n "" --exclude=/.ssh >/dev/null 2>&1
+restore_one_home "$BK/home/$FIXTURE" "$DST" --exclude=/.ssh >/dev/null 2>&1
 assert_file_absent "an excluded path is not restored" "$DST/.ssh/id_ed25519"
 assert_file_exists "everything else still is" "$DST/docs/notes"
 
 # --- R.3: an existing differing file is kept, never silently overwritten ---
 rm -rf "$DST"; mkdir -p "$DST/docs"
 echo "notes v-new-local" > "$DST/docs/notes"
-restore_one_home "$BK/home/$FIXTURE" "$DST" n "" >/dev/null 2>&1
+restore_one_home "$BK/home/$FIXTURE" "$DST" >/dev/null 2>&1
 assert_eq "restored content wins at the original path" "$(cat "$DST/docs/notes")" "notes v-old"
 kept="$(cat "$DST"/docs/notes.pre-restore-* 2>/dev/null)"
 assert_eq "the previous local file is kept as .pre-restore-<time>" "$kept" "notes v-new-local"
 
 # --- R.4: dry run changes nothing ---
 rm -rf "$DST"; mkdir -p "$DST"
-restore_one_home "$BK/home/$FIXTURE" "$DST" y "" >/dev/null 2>&1
+restore_one_home "$BK/home/$FIXTURE" "$DST" -n -i >/dev/null 2>&1
 assert_eq "dry run copied nothing" "$(ls -A "$DST" | wc -l)" "0"
 
 # --- R.5: the backup is only read ---
@@ -65,7 +65,7 @@ assert_eq "backup untouched (no .pre-restore files in it)" "$(find "$BK" -name '
 if [ "$(id -u)" -ne 0 ]; then
   rm -rf "$DST"; mkdir -p "$DST"
   chmod 000 "$BK/home/$FIXTURE/docs/notes"
-  restore_one_home "$BK/home/$FIXTURE" "$DST" n "" >/dev/null 2>&1; rc=$?
+  restore_one_home "$BK/home/$FIXTURE" "$DST" >/dev/null 2>&1; rc=$?
   chmod 644 "$BK/home/$FIXTURE/docs/notes"
   assert_eq "an unreadable file makes the restore report failure" "$([ "$rc" -ne 0 ] && echo failed)" "failed"
 fi
