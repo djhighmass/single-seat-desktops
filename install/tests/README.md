@@ -3,7 +3,7 @@
 ```
 ./run.sh              runs unit + functional (never disruptive)
 ./run.sh unit
-./run.sh functional
+./run.sh functional   (also runs ../../apps/tests, the optional apps layer's test)
 ./run.sh disruptive   lists the disruptive tests -- run one yourself
 ```
 
@@ -48,6 +48,7 @@ archives -- ever lands in the repo. Everything runs against a
 lib/testlib.sh           shared assert helpers + scratch-dir setup
 unit/                     pure functions, mocked inputs, no sudo
 functional/               real scripts, real execution, mostly no sudo
+../../apps/tests/         the optional apps layer's test; run.sh runs it with functional/
 disruptive/               real switch-desktop.sh calls -- never auto-run
 .personal_pattern         gitignored -- see test_repo_hygiene.sh
 ```

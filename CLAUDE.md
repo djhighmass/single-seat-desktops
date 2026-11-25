@@ -20,6 +20,12 @@ the full usage/architecture rationale; read it before making changes —
 most non-obvious decisions in this codebase are the product of real,
 documented debugging, not arbitrary choices.
 
+`apps/` is a separate, optional layer for applications that are a choice
+(LXTerminal, Claude Code, Chrome): a folder per app, run by a root installer
+and a per-user defaults script. Third-party repositories come from Debian's `extrepo`. It is
+written for a fresh machine (guards: "Scope" in `apps/README.md`). The desktop
+installer does not need it.
+
 ## Commands
 
 No build step. There is no repo-wide linter configured; `bash -n
@@ -30,7 +36,7 @@ No build step. There is no repo-wide linter configured; `bash -n
 # Run the safe part of the suite (unit + functional; never disruptive)
 bash install/tests/run.sh
 bash install/tests/run.sh unit
-bash install/tests/run.sh functional
+bash install/tests/run.sh functional   # also runs apps/tests (the optional apps layer)
 
 # Run a single test file directly
 bash install/tests/functional/test_customize_foot.sh
