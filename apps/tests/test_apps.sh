@@ -3,14 +3,16 @@
 # CLIs. apt-get, dpkg-query and extrepo are stubs and install.sh gets a scratch
 # /etc, so the machine isn't changed. Installer checks past argument handling,
 # and "defaults refuse root", need root or passwordless sudo; "the installer
-# needs root" and the other defaults checks need a non-root user. Skips are reported. Real extrepo and apt need a
-# real install.
+# needs root" and the other defaults checks need a non-root user, and the one
+# that another user can't read Claude's settings also needs passwordless sudo.
+# Skips are reported. Real extrepo and apt need a real install.
 #
 #   bash apps/tests/test_apps.sh
 set -uo pipefail
+umask 022   # the scratch files, stubs included: usable by us, writable by no one else
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
-source ../install/tests/lib/testlib.sh
-unset APPS NAMES XG CC DPKG_INSTALLED DPKG_STATUS $(compgen -A variable FAIL_)   # none inherited from the caller's shell
+source ../install/tests/lib/testlib.sh || exit 1   # SCRATCH must be its own, not the caller's
+unset BASH_ENV APPS NAMES XG CC DPKG_INSTALLED DPKG_STATUS $(compgen -A variable FAIL_)   # none inherited from the caller's shell
 echo "test_apps:"
 
 # Stubs. apt-get and extrepo log what they were asked to do into $SCRATCH/calls.
@@ -22,9 +24,10 @@ echo "test_apps:"
 #   dpkg-query  answers only the query install.sh makes: $DPKG_INSTALLED is in
 #               state $DPKG_STATUS (default installed); a package apt-get left
 #               partway is in the state it recorded
-#   extrepo     "enable <name>" writes the source file, and for google_chrome
-#               overwrites the defaults file, as the real one does; with
-#               $FAIL_EXTREPO set it fails after writing them
+#   extrepo     "enable <name>" fails unless the non-free policy is on. It writes
+#               the source file, and for google_chrome overwrites the defaults
+#               file, as the real one does; with $FAIL_EXTREPO set it fails
+#               after writing them
 STUB="$SCRATCH/stub"; mkdir -p "$STUB"
 cat > "$STUB/apt-get" <<'STUB_END'
 #!/bin/sh
@@ -48,15 +51,27 @@ cat > "$STUB/extrepo" <<'STUB_END'
 #!/bin/sh
 echo "extrepo $*" >> "$SCRATCH/calls"
 [ "$1" = enable ] || exit 1
+grep -qxE -- '[[:space:]]*- non-free[[:space:]]*(#.*)?' "$APPS_ETC/extrepo/config.yaml" || exit 1
 echo "Signed-By: /var/lib/extrepo/keys/$2.asc" > "$APPS_ETC/apt/sources.list.d/extrepo_$2.sources"
 [ "$2" != google_chrome ] || echo 'repo_add_once="false"' > "$APPS_ETC/default/google-chrome"
 [ -z "$FAIL_EXTREPO" ] || exit 1
 STUB_END
 chmod +x "$STUB"/*
+# If a stub can't run (say /tmp is noexec), the real command would, maybe as root.
+for c in apt-get dpkg-query extrepo; do
+  [ "$(PATH="$STUB:$PATH"; command -v "$c")" = "$STUB/$c" ] || { echo "  NOT OK - the $c stub can't run; stopping" >&2; exit 1; }
+done
 
 ETC="$SCRATCH/etc"
 as_root() { if [ "$EUID" -eq 0 ]; then env "$@"; else sudo -n env "$@"; fi; }
 as_root true 2>/dev/null && have_root=y || have_root=n
+# another_can_read <file under $SCRATCH>: can "nobody" read it? Lets others
+# through the directories down to it first, so they don't decide the answer.
+another_can_read() {
+  local d="$1"
+  while [ "$d" != "$SCRATCH" ]; do d="$(dirname "$d")"; chmod o+x "$d" || return 1; done
+  as_root setpriv --reuid=nobody --regid=nogroup --clear-groups cat "$1" >/dev/null 2>&1
+}
 # Root-run install.sh creates things under $ETC that this user may not be able to remove.
 [ "$have_root" = n ] || trap 'as_root rm -rf "$SCRATCH"' EXIT
 # Debian's lines, plus a look-alike ("non-free-firmware") that must stay as it is.
@@ -151,11 +166,12 @@ else
     fresh_etc
     run_ok "$app installs" install_apps "$app"
     assert_success "...extrepo is installed before it is used" in_order "install -y extrepo" "extrepo enable $repo"
-    assert_success "...apt is refreshed after the repository is added" test "$(calls | grep -n 'apt-get update' | tail -1 | cut -d: -f1)" -gt "$(call_line "extrepo enable")"
+    assert_success "...apt is refreshed between adding the repository and installing from it" \
+      test "$(calls | sed -n "/extrepo enable/,/install -y $pkg/p" | grep -c '^apt-get update')" -gt 0
     assert_success "...then installs $pkg" in_order "extrepo enable $repo" "install -y $pkg"
     assert_eq "...both installs non-interactive" "$(calls | grep '^frontend:')" $'frontend: noninteractive\nfrontend: noninteractive'
     assert_eq "...only the non-free policy is enabled" "$(cat "$ETC/extrepo/config.yaml")" "${SHIPPED/'# - non-free'/- non-free}"
-    assert_eq "...the extrepo stub's file is readable by others: install.sh replaced the caller's umask" "$(find "$src" -perm -004 | wc -l)" "1"
+    assert_success "...another user can read the extrepo stub's file: install.sh replaced the caller's umask" another_can_read "$src"
     assert_eq "...and is kept" "$(repo_files)" "$files"
     run_ok "...a second run succeeds" install_apps "$app"
     assert_not_contains "...without enabling the repository again" "$(calls)" "extrepo enable"
@@ -201,6 +217,9 @@ else
       assert_eq "...doesn't keep its repository" "$(repo_files)" "0"
     done
   done
+  fresh_etc
+  FAIL_INSTALL=lxterminal run_fail "a later app can fail after claude-code installs" install_apps claude-code lxterminal
+  assert_file_exists "...and Claude's repository is kept" "$ETC/apt/sources.list.d/extrepo_anthropic-claude-code.sources"
 
   chrome_defaults="$ETC/default/google-chrome"
   chrome_source="$ETC/apt/sources.list.d/extrepo_google_chrome.sources"
@@ -272,7 +291,7 @@ if [ "$have_root" = n ]; then
   echo "  skip - that defaults refuse root needs root or passwordless sudo"
 else
   new_home root
-  run_fail "defaults.sh refuses to run as root" as_root HOME="$H" XDG_CONFIG_HOME= CLAUDE_CONFIG_DIR= PATH="$SCRATCH/both" /bin/bash defaults.sh
+  run_fail "defaults.sh refuses to run as root" as_root HOME="$H" XDG_CONFIG_HOME= CLAUDE_CONFIG_DIR= PATH="$SCRATCH/both" /bin/bash defaults.sh lxterminal claude-code
   assert_contains "...saying so" "$out" "not as root"
   assert_eq "...writing nothing" "$(everything)" "0"
 fi
@@ -317,7 +336,12 @@ else
   new_home fresh; run_ok "a first run succeeds" defaults
   assert_eq "LXTerminal gets 10000 lines of scrollback" "$(cat "$L")" $'[general]\nscrollback=10000'
   assert_eq "Claude Code gets the classic renderer" "$(cat "$S")" '{"tui": "default"}'
-  assert_eq "...in a file only its owner can read" "$(find "$S" -perm /077 | wc -l)" "0"
+  if [ "$have_root" = n ]; then
+    echo "  skip - that another user can't read Claude's settings needs root or passwordless sudo"
+  else
+    assert_failure "...which another user can't read" another_can_read "$S"
+    chmod o+r "$S"; assert_success "...though they could if it allowed others" another_can_read "$S"
+  fi
   assert_eq "...with no temp files left" "$(everything)" "2"
 
   echo mine > "$S"; : > "$L"; run_ok "a run over existing files succeeds" defaults

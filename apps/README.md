@@ -84,5 +84,6 @@ Test with `bash apps/tests/test_apps.sh`, also run by
 the real ones takes a real install. Installer checks past argument handling, and
 the check that defaults refuse root, need root or passwordless sudo. The check
 that the installer needs root, and the other defaults checks, need a non-root
-user. Skipped checks are reported. The dev
+user; the one that another user can't read Claude Code's settings also needs
+passwordless sudo. Skipped checks are reported. The dev
 container (`install/tests/test-in-container.sh`) can run them all.

@@ -50,7 +50,8 @@ assert_failure() {
 
 # A fresh, isolated scratch directory per test file, discarded on exit --
 # nothing a test produces ever needs to (or should) land in the repo.
-SCRATCH="$(mktemp -d /tmp/wf-install-tests.XXXXXX)"
+# Without it, stop: an empty SCRATCH would turn "$SCRATCH/etc" into /etc.
+SCRATCH="$(mktemp -d /tmp/wf-install-tests.XXXXXX)" || exit 1
 trap 'rm -rf "$SCRATCH"' EXIT
 
 summarize_and_exit() {
