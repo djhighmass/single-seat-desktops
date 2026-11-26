@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # Shared helpers for the wayfire multi-user desktop installer.
-# Sourced by 00-create-users.sh and 10-install-wayfire-desktops.sh.
+# Sourced by the numbered install/ scripts and by apps/lib.sh (the optional apps
+# layer), so a change here reaches it too.
 
 C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'
 
